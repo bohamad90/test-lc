@@ -1,19 +1,159 @@
-JuncTek KM-F Shunt — Protocol Test
-Standalone test page. Open this in Bluefy on iPad/iPhone, or Chrome on desktop/Android.
-Connect to Shunt
-Not connected.
-VOLTAGE
---V
-CURRENT
---A
-POWER
---W
-STATE OF CHARGE
---%
-REMAINING
---Ah
-FULL CAPACITY
---Ah
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>JuncTek KM-F Shunt Protocol Test</title>
+<style>
+  :root { --bg: #111; --card: #1b1b1f; --accent: #f59e0b; --good: #22c55e; }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: #f4f4f5; font-family: -apple-system, system-ui, sans-serif;
+    margin: 0; padding: 24px; min-height: 100vh;
+  }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #9ca3af; font-size: 13px; margin-bottom: 20px; }
+  button {
+    font-size: 16px; padding: 12px 18px; border-radius: 10px; border: none;
+    background: var(--accent); color: #111; cursor: pointer; font-weight: 600;
+  }
+  button:disabled { background: #374151; color: #6b7280; }
+  #connectBtn { width: 100%; margin-bottom: 20px; }
+  .readings { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
+  .reading-card {
+    background: var(--card); border-radius: 14px; padding: 18px; text-align: center;
+  }
+  .reading-card .label { font-size: 12px; color: #9ca3af; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .reading-card .value { font-size: 28px; font-weight: 700; }
+  .reading-card .unit { font-size: 13px; color: #9ca3af; margin-left: 4px; }
+  .status-bar { font-size: 13px; color: #9ca3af; margin-bottom: 12px; }
+  .log {
+    background: var(--card); border-radius: 10px; padding: 14px; font-family: monospace;
+    font-size: 12px; color: #a1a1aa; height: 240px; overflow-y: auto; white-space: pre-wrap;
+  }
+  .send-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .send-row input {
+    flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #374151;
+    background: #18181b; color: #f4f4f5; font-family: monospace;
+  }
+</style>
+</head>
+<body>
 
-Send
+<h1>JuncTek KM-F Shunt Protocol Test</h1>
+<div class="sub">Standalone test page. Open this in Bluefy on iPad/iPhone, or Chrome on desktop/Android.</div>
 
+<button id="connectBtn">Connect to Shunt</button>
+<div class="status-bar" id="statusBar">Not connected.</div>
+
+<div class="readings">
+  <div class="reading-card">
+    <div class="label">Voltage</div>
+    <div class="value"><span id="voltage">--</span><span class="unit">V</span></div>
+  </div>
+  <div class="reading-card">
+    <div class="label">Current</div>
+    <div class="value"><span id="current">--</span><span class="unit">A</span></div>
+  </div>
+  <div class="reading-card">
+    <div class="label">Power</div>
+    <div class="value"><span id="power">--</span><span class="unit">W</span></div>
+  </div>
+  <div class="reading-card">
+    <div class="label">State of Charge</div>
+    <div class="value"><span id="soc">--</span><span class="unit">%</span></div>
+  </div>
+  <div class="reading-card">
+    <div class="label">Remaining</div>
+    <div class="value"><span id="remaining">--</span><span class="unit">Ah</span></div>
+  </div>
+  <div class="reading-card">
+    <div class="label">Full Capacity</div>
+    <div class="value"><span id="capacity">--</span><span class="unit">Ah</span></div>
+  </div>
+</div>
+
+<div class="send-row">
+  <input id="cmdInput" type="text" placeholder=":r00=86." />
+  <button id="sendBtn" disabled>Send</button>
+</div>
+
+<div class="log" id="log"></div>
+
+<script src="junctek-shunt-ble.js"></script>
+<script>
+  const shunt = new JuncTekShunt();
+
+  const logEl = document.getElementById('log');
+  const statusBar = document.getElementById('statusBar');
+  const connectBtn = document.getElementById('connectBtn');
+  const sendBtn = document.getElementById('sendBtn');
+  const cmdInput = document.getElementById('cmdInput');
+
+  function log(msg) {
+    const time = new Date().toLocaleTimeString();
+    logEl.textContent += '[' + time + '] ' + msg + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  connectBtn.addEventListener('click', async function() {
+    try {
+      connectBtn.disabled = true;
+      connectBtn.textContent = 'Connecting...';
+      const name = await shunt.connect();
+      statusBar.textContent = 'Connected: ' + name;
+      connectBtn.textContent = 'Connected: ' + name;
+      sendBtn.disabled = false;
+      log('Connected to ' + name);
+      log('Service UUID: ' + shunt.service.uuid);
+      log('Notify char: ' + shunt.notifyChar.uuid + ', Write char: ' + shunt.writeChar.uuid);
+    } catch (err) {
+      log('Connection failed: ' + err.message);
+      statusBar.textContent = 'Connection failed - see log.';
+      connectBtn.disabled = false;
+      connectBtn.textContent = 'Connect to Shunt';
+    }
+  });
+
+  sendBtn.addEventListener('click', async function() {
+    const cmd = cmdInput.value || ':r00=86.';
+    try {
+      await shunt.sendRaw(cmd);
+      log('Sent raw: ' + cmd);
+    } catch (err) {
+      log('Send failed: ' + err.message);
+    }
+  });
+
+  shunt.onConnectionChange(function(info) {
+    if (info.connected) {
+      statusBar.textContent = info.reconnected ? 'Reconnected.' : 'Connected.';
+      log(info.reconnected ? 'Auto-reconnected to shunt.' : 'Connection established.');
+    } else {
+      statusBar.textContent = 'Disconnected - will auto-reconnect when possible.';
+      log('Disconnected. Will retry automatically.');
+    }
+  });
+
+  shunt.onReading(function(data) {
+    if (!data.connected) {
+      statusBar.textContent = 'Disconnected.';
+      log('Shunt disconnected.');
+      return;
+    }
+    document.getElementById('voltage').textContent = data.voltage !== null ? data.voltage.toFixed(2) : '--';
+    document.getElementById('current').textContent = data.current !== null ? data.current.toFixed(2) : '--';
+    document.getElementById('power').textContent = data.power !== null ? data.power.toFixed(1) : '--';
+    document.getElementById('soc').textContent = data.socPercent !== null ? data.socPercent : '--';
+    document.getElementById('remaining').textContent = data.remainingAh !== null ? data.remainingAh.toFixed(1) : '--';
+    document.getElementById('capacity').textContent = data.fullCapacityAh !== null ? data.fullCapacityAh : '--';
+    log('Reading - V:' + (data.voltage !== null ? data.voltage.toFixed(2) : '--') + ' I:' + (data.current !== null ? data.current.toFixed(2) : '--') + ' P:' + (data.power !== null ? data.power.toFixed(1) : '--') + ' SOC:' + data.socPercent + '%');
+  });
+
+  shunt.onRawFrame(function(frame) {
+    log('Raw frame [' + frame.letter + ']: ' + JSON.stringify(frame.values));
+  });
+</script>
+
+</body>
+</html>
