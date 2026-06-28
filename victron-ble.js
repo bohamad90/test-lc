@@ -84,6 +84,7 @@ class VictronBLE {
     this.device = null;
     this._readingListeners = [];
     this._debugListeners = [];
+    this._dumpedEventOnce = false;
     this._cryptoKeyPromise = this.encryptionKey ? this._importKey(this.encryptionKey) : null;
   }
 
@@ -170,6 +171,52 @@ class VictronBLE {
 
   async _handleAdvertisement(event) {
     try {
+      if (!this._dumpedEventOnce) {
+        this._dumpedEventOnce = true;
+        var ownKeys = Object.keys(event);
+        var protoKeys = [];
+        try {
+          protoKeys = Object.getOwnPropertyNames(Object.getPrototypeOf(event));
+        } catch (e) {}
+        this._debug('ONE-TIME EVENT DUMP -- own keys: [' + ownKeys.join(',') + ']');
+        this._debug('ONE-TIME EVENT DUMP -- prototype keys: [' + protoKeys.join(',') + ']');
+
+        var allKeys = ownKeys.concat(protoKeys);
+        for (var ak = 0; ak < allKeys.length; ak++) {
+          var kName = allKeys[ak];
+          if (kName === 'manufacturerData' || kName === 'serviceData') continue; // covered separately below
+          try {
+            var kVal = event[kName];
+            var kType = typeof kVal;
+            if (kType === 'function') continue;
+            var kSummary;
+            if (kVal && kVal.constructor && kVal.constructor.name === 'DataView') {
+              var dvBytes = new Uint8Array(kVal.buffer);
+              var dvHex = '';
+              for (var dv = 0; dv < dvBytes.length; dv++) dvHex += dvBytes[dv].toString(16).padStart(2, '0') + ' ';
+              kSummary = 'DataView(' + dvBytes.length + ' bytes): ' + dvHex;
+            } else if (kVal instanceof Map) {
+              kSummary = 'Map(size=' + kVal.size + ')';
+            } else {
+              try {
+                kSummary = JSON.stringify(kVal);
+              } catch (e2) {
+                kSummary = String(kVal);
+              }
+            }
+            this._debug('  event.' + kName + ' (' + kType + ') = ' + kSummary);
+          } catch (e3) {
+            this._debug('  event.' + kName + ' -- error reading: ' + e3.message);
+          }
+        }
+
+        // Specifically check serviceData too, in case Victron's data ends up there instead.
+        try {
+          var svcKeys = mfgDataKeys(event.serviceData);
+          this._debug('ONE-TIME EVENT DUMP -- serviceData keys: [' + svcKeys.join(',') + ']');
+        } catch (e4) {}
+      }
+
       var mfgKeys = mfgDataKeys(event.manufacturerData);
       this._debug(
         'Advertisement received from "' + (event.device ? event.device.name : '?') +
@@ -364,9 +411,9 @@ if (typeof module !== 'undefined' && module.exports) {
   window.VictronBLE = VictronBLE;
 }
 
-console.log('>>> victron-ble.js VERSION 4 LOADED <<<');
+console.log('>>> victron-ble.js VERSION 5 LOADED <<<');
 if (typeof window !== 'undefined') {
-  window.__VICTRON_BLE_VERSION__ = 4;
+  window.__VICTRON_BLE_VERSION__ = 5;
 }
 
 // Victron's charger device-state enum, per the published Instant Readout spec / VE.Direct
