@@ -5,11 +5,11 @@
  * P2C12 / P2C12A / P2C6A / P2C6B and similar gang-count variants).
  *
  * Protocol reverse-engineered via static analysis of the MICTUNING Android app
- * (com.qunchen.headlightSpp v3.6.16). See MICTUNING_BLE_Protocol.md alongside this file
- * for the full writeup. Treat byte offsets as a strong first draft — verify against your
- * actual panel with a live capture before relying on this for anything safety-critical.
+ * (com.qunchen.headlightSpp v3.6.16), then CORRECTED and CONFIRMED via a live Apple
+ * PacketLogger capture against a real P1S 12-gang panel. See MICTUNING_BLE_Protocol.md
+ * alongside this file for the full writeup.
  *
- * Requires a browser with navigator.bluetooth — on iPad/iPhone this means the Bluefy browser
+ * Requires a browser with navigator.bluetooth -- on iPad/iPhone this means the Bluefy browser
  * (Safari itself has zero Web Bluetooth support, by Apple design, with no plan to change).
  *
  * Usage:
@@ -17,6 +17,7 @@
  *   await panel.connect();              // prompts the OS BLE device picker
  *   await panel.setChannel(0, true);     // turn channel 1 ON
  *   await panel.setChannel(0, false);    // turn channel 1 OFF
+ *   await panel.setAll(true);            // turn ALL channels ON
  *   panel.onStatus((status) => { ... }); // get live status updates
  */
 
@@ -33,9 +34,7 @@ class MictuningPanel {
     this.notifyChar = null;
     this._statusListeners = [];
     this._connectionListeners = [];
-    // Per-channel last-known state, so toggling one channel doesn't clobber
-    // brightness/flash settings for that channel. Defaults until we learn better.
-    this._channelState = {}; // { [index]: { lightness, flash } }
+    this._channelState = {}; // { [index]: boolean } -- last known on/off state per channel
 
     // --- Auto-reconnect state ---
     this._autoReconnect = opts.autoReconnect !== false; // on by default
@@ -90,7 +89,7 @@ class MictuningPanel {
         this._handleNotify(event.target.value)
       );
     } catch (err) {
-      console.warn('Could not subscribe to FFF1 notifications — status updates unavailable.', err);
+      console.warn('Could not subscribe to FFF1 notifications -- status updates unavailable.', err);
     }
 
     this._connectionListeners.forEach((cb) => cb({ connected: true, reconnected: this._reconnecting }));
@@ -159,41 +158,39 @@ class MictuningPanel {
    * Turn a single channel on or off.
    * @param {number} channelIndex 0-based channel index (channel 1 = 0, channel 2 = 1, ...)
    * @param {boolean} on
-   * @param {object} [opts] optional { lightness (0-100), flash (0-N), save (bool) } overrides
+   *
+   * Packet structure CONFIRMED via live PacketLogger capture against a real P1S 12-gang panel
+   * (see MICTUNING_BLE_Protocol.md section 2). 7 bytes: [0xf5, byte1..byte6], where each of the
+   * 6 data bytes covers 2 channels via nibbles (high nibble = first channel of the pair, low
+   * nibble = second). All-zero except the one nibble being set.
    */
-  async setChannel(channelIndex, on, opts = {}) {
+  async setChannel(channelIndex, on) {
     if (!this.writeChar) throw new Error('Not connected. Call connect() first.');
 
-    const prev = this._channelState[channelIndex] || { lightness: 100, flash: 0 };
-    const lightness = opts.lightness !== undefined ? opts.lightness : prev.lightness;
-    const flash = opts.flash !== undefined ? opts.flash : prev.flash;
-    const save = opts.save !== undefined ? opts.save : false;
+    const packet = new Uint8Array(7);
+    packet[0] = 0xf5;
 
-    const packet = new Uint8Array([
-      0x03,             // byte 0: fixed "set channel" opcode
-      channelIndex & 0xff, // byte 1: channel index (0-based)
-      on ? 0x01 : 0x00, // byte 2: on/off
-      0x00,             // byte 3: mode flag (0x00 = single colour / plain on-off)
-      0x00,             // byte 4: speed low byte (unused for plain on/off)
-      0x00,             // byte 5: speed high byte (unused for plain on/off)
-      lightness & 0xff, // byte 6: brightness 0-100
-      flash & 0xff,     // byte 7: flash/strobe mode
-      0x01,             // byte 8: colour count (1 = solid, no animation)
-      save ? 0x01 : 0x00, // byte 9: persist to panel memory
-    ]);
+    const pairIndex = Math.floor(channelIndex / 2); // which data byte (0-5)
+    const isHighNibble = channelIndex % 2 === 0; // even index (channel 1,3,5...) = high nibble
+    if (pairIndex > 5) throw new Error(`Channel index ${channelIndex} out of range (this packet supports 12 channels, indices 0-11).`);
 
-    this._channelState[channelIndex] = { lightness, flash };
+    if (on) {
+      packet[1 + pairIndex] = isHighNibble ? 0x10 : 0x01;
+    }
+    // OFF is implicitly all-zero -- confirmed by capture, no explicit "off" marker needed.
+
+    this._channelState[channelIndex] = on;
 
     await this.writeChar.writeValueWithoutResponse(packet);
   }
 
-  /** Convenience: turn ALL channels on or off via the same per-channel packet, in sequence. */
-  async setAll(on, channelCount = 8, opts = {}) {
-    for (let i = 0; i < channelCount; i++) {
-      await this.setChannel(i, on, opts);
-      // Small delay helps avoid flooding writeWithoutResponse on flaky BLE stacks (Bluefy/iOS).
-      await new Promise((r) => setTimeout(r, 60));
-    }
+  /** All On / All Off, using the dedicated 0xf6 opcode (8 bytes), confirmed via live capture. */
+  async setAll(on) {
+    if (!this.writeChar) throw new Error('Not connected. Call connect() first.');
+    const packet = new Uint8Array(8);
+    packet[0] = 0xf6;
+    packet[1] = on ? 0x01 : 0x00;
+    await this.writeChar.writeValueWithoutResponse(packet);
   }
 
   /** Sends the panel-wide status query (hex "F800") used by the app's checkP2cStatus(). */
@@ -207,7 +204,7 @@ class MictuningPanel {
     const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0').toUpperCase()).join('');
 
     // Best-effort parse per the reverse-engineered status layout. This section is the least
-    // confidently verified part of the protocol -- see MICTUNING_BLE_Protocol.md section 3.
+    // confidently verified part of the protocol -- see MICTUNING_BLE_Protocol.md section 4.
     let panelOn = null;
     let channels = [];
     try {
@@ -232,4 +229,3 @@ if (typeof module !== 'undefined' && module.exports) {
 } else {
   window.MictuningPanel = MictuningPanel;
 }
-
