@@ -91,15 +91,20 @@ class JuncTekShunt {
     this.service = services[services.length - 1];
 
     const characteristics = await this.service.getCharacteristics();
-    if (characteristics.length < 2) {
-      throw new Error(
-        `Expected at least 2 characteristics on service ${this.service.uuid}, found ${characteristics.length}.`
-      );
+    if (!characteristics.length) {
+      throw new Error(`No characteristics found on service ${this.service.uuid}.`);
     }
 
-    // Junce Home convention: characteristics[0] = notify/read, characteristics[1] = write.
-    this.notifyChar = characteristics[0];
-    this.writeChar = characteristics[1];
+    if (characteristics.length === 1) {
+      // Some BLE serial-bridge chips combine notify+write onto a SINGLE characteristic
+      // rather than splitting them across two separate ones. Use it for both roles.
+      this.notifyChar = characteristics[0];
+      this.writeChar = characteristics[0];
+    } else {
+      // Junce Home convention: characteristics[0] = notify/read, characteristics[1] = write.
+      this.notifyChar = characteristics[0];
+      this.writeChar = characteristics[1];
+    }
 
     await this.notifyChar.startNotifications();
     this.notifyChar.addEventListener('characteristicvaluechanged', (event) =>
