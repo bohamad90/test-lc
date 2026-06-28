@@ -22,7 +22,12 @@
  *   // device starts streaming automatically after the initial handshake command
  */
 
-const DEFAULT_PASSWORD = '11223344';  console.log('>>> junctek-shunt-ble.js VERSION 3 LOADED <<<'); if (typeof window !== 'undefined') {   window.__JUNCTEK_BLE_VERSION__ = 3; }
+const DEFAULT_PASSWORD = '11223344';
+
+console.log('>>> junctek-shunt-ble.js VERSION 4 LOADED <<<');
+if (typeof window !== 'undefined') {
+  window.__JUNCTEK_BLE_VERSION__ = 4;
+}
 
 class JuncTekShunt {
   constructor(opts = {}) {
@@ -107,9 +112,16 @@ class JuncTekShunt {
     }
 
     await this.notifyChar.startNotifications();
-    this.notifyChar.addEventListener('characteristicvaluechanged', (event) =>
-      this._handleNotify(event.target.value)
-    );
+    this.notifyChar.addEventListener('characteristicvaluechanged', (event) => {
+      // DEBUG: fire a raw, unparsed callback for every single notification, regardless of
+      // whether it parses successfully -- this lets the test page prove notifications are
+      // arriving at all, even if parsing later fails for some reason.
+      if (this._onRawNotifyDebug) {
+        const bytes = new Uint8Array(event.target.value.buffer);
+        this._onRawNotifyDebug(bytes);
+      }
+      this._handleNotify(event.target.value);
+    });
 
     // Kick off data streaming, mirroring the app's own connect sequence.
     await this._delay(300);
@@ -181,6 +193,13 @@ class JuncTekShunt {
    *  exploring registers this client doesn't decode yet (D, F, etc). */
   onRawFrame(callback) {
     this._rawFrameListeners.push(callback);
+  }
+
+  /** DEBUG ONLY: register a callback that fires on every single BLE notification, with the
+   *  completely raw, unparsed bytes -- bypasses all frame-parsing logic. Useful for confirming
+   *  whether notifications are arriving at all when troubleshooting a connection. */
+  onRawNotifyDebug(callback) {
+    this._onRawNotifyDebug = callback;
   }
 
   /** Sends a raw command string as literal ASCII bytes (e.g. ":r00=86."). */
