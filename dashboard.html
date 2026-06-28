@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="LC79 Power" />
+<meta name="theme-color" content="#0B0E11" />
+<title>LC79 Camper Power</title>
+<style>
+  :root {
+    --bg: #0B0E11; --panel: #14181D; --panel-raised: #181D23; --hairline: #262C33;
+    --ink: #E8EAED; --ink-dim: #8A929C; --ink-faint: #5B636D;
+    --amber: #D98E04; --amber-dim: #8A5E08; --good: #4ADE9C; --good-dim: #2C7A57;
+    --alarm: #E5484D; --blue: #5B9FD9;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    background: var(--bg); margin: 0; color: var(--ink);
+    font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+  }
+  .screen { max-width: 460px; margin: 0 auto; min-height: 100vh; padding: 0 0 48px; position: relative; }
+
+  .topbar { padding: 18px 20px 14px; display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--hairline); }
+  .topbar .title { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+  .topbar .title .dim { color: var(--ink-dim); font-weight: 500; }
+  .topbar .clock { font-family: 'SF Mono', ui-monospace, monospace; font-size: 13px; color: var(--ink-dim); letter-spacing: 0.02em; }
+
+  /* Connection bar */
+  .conn-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 14px 16px 4px; }
+  .conn-btn {
+    background: var(--panel-raised); border: 1px solid var(--hairline); border-radius: 12px;
+    padding: 11px 8px; color: var(--ink); font-size: 12.5px; font-weight: 600; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer;
+  }
+  .conn-btn .cdot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); }
+  .conn-btn.connected { border-color: var(--good-dim); }
+  .conn-btn.connected .cdot { background: var(--good); box-shadow: 0 0 0 3px rgba(74,222,156,0.15); }
+  .conn-btn.connecting .cdot { background: var(--amber); }
+  .conn-btn .sub { font-size: 9.5px; color: var(--ink-faint); font-weight: 500; }
+
+  .keyrow { padding: 6px 16px 0; }
+  .keyrow input {
+    width: 100%; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--hairline);
+    background: #18181b; color: var(--ink-dim); font-size: 12px; font-family: ui-monospace, monospace;
+  }
+  .keyrow .lbl { font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 2px 5px; }
+
+  .section-label {
+    display: flex; align-items: center; gap: 8px; padding: 22px 20px 10px;
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600;
+  }
+  .section-label .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); flex: none; }
+  .section-label .dot.live { background: var(--good); box-shadow: 0 0 0 3px rgba(74,222,156,0.15); }
+  .section-label .dot.amber { background: var(--amber); box-shadow: 0 0 0 3px rgba(217,142,4,0.15); }
+  .section-label .src { margin-left: auto; font-size: 10px; color: var(--ink-faint); letter-spacing: 0.04em; text-transform: none; }
+
+  /* Victron */
+  .victron-panel { margin: 0 16px; background: linear-gradient(180deg, var(--panel-raised), var(--panel)); border: 1px solid var(--hairline); border-radius: 18px; padding: 20px; }
+  .victron-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+  .victron-name { font-size: 14px; font-weight: 600; }
+  .victron-sub { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+  .victron-yield { text-align: right; }
+  .victron-yield .num { font-family: ui-monospace, monospace; font-size: 20px; font-weight: 600; color: var(--good); }
+  .victron-yield .lbl { font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; }
+  .pv-flow { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin: 4px 0 20px; }
+  .pv-flow .node { text-align: center; }
+  .pv-flow .node .icon { font-size: 22px; margin-bottom: 6px; opacity: 0.9; }
+  .pv-flow .node .big { font-family: ui-monospace, monospace; font-size: 22px; font-weight: 650; }
+  .pv-flow .node .small { font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+  .pv-flow .arrow { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px; }
+  .pv-flow .arrow .line { width: 36px; height: 2px; background: linear-gradient(90deg, var(--amber-dim), var(--amber)); border-radius: 2px; position: relative; overflow: hidden; }
+  .pv-flow .arrow .line.active::after { content: ''; position: absolute; top: 0; left: -30%; width: 30%; height: 100%; background: rgba(255,255,255,0.55); animation: flow 1.8s linear infinite; }
+  @keyframes flow { from { left: -30%; } to { left: 100%; } }
+  .pv-flow .arrow .pct { font-size: 10px; color: var(--amber); font-family: ui-monospace, monospace; }
+  .victron-meta { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--hairline); padding-top: 14px; }
+  .victron-meta .m { text-align: center; }
+  .victron-meta .m .v { font-family: ui-monospace, monospace; font-size: 14px; font-weight: 600; }
+  .victron-meta .m .k { font-size: 9.5px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 3px; }
+  .state-pill { display: inline-flex; align-items: center; gap: 5px; background: rgba(74,222,156,0.12); color: var(--good); border-radius: 20px; padding: 5px 10px; font-size: 11px; font-weight: 600; }
+  .state-pill .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--good); }
+
+  /* JuncTek */
+  .shunt-panel { margin: 0 16px; background: var(--panel); border: 1px solid var(--hairline); border-radius: 18px; padding: 20px; display: flex; gap: 20px; align-items: center; }
+  .gauge-wrap { position: relative; width: 132px; height: 132px; flex: none; }
+  .gauge-wrap svg { width: 132px; height: 132px; transform: rotate(-90deg); }
+  .gauge-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .gauge-center .pct { font-family: ui-monospace, monospace; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+  .gauge-center .pct .sign { font-size: 15px; color: var(--ink-faint); font-weight: 500; }
+  .gauge-center .lbl { font-size: 9.5px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+  .shunt-stats { flex: 1; display: flex; flex-direction: column; gap: 11px; }
+  .shunt-stat { display: flex; justify-content: space-between; align-items: baseline; }
+  .shunt-stat .k { font-size: 12px; color: var(--ink-dim); }
+  .shunt-stat .v { font-family: ui-monospace, monospace; font-size: 15px; font-weight: 600; }
+  .shunt-stat .v.charging { color: var(--good); }
+  .shunt-stat .v.discharging { color: var(--amber); }
+  .shunt-divider { height: 1px; background: var(--hairline); margin: 2px 0; }
+  .shunt-eta { font-size: 10.5px; color: var(--ink-faint); }
+  .shunt-eta b { color: var(--ink-dim); font-weight: 600; }
+
+  /* MICTUNING */
+  .switch-panel { margin: 0 16px; background: var(--panel); border: 1px solid var(--hairline); border-radius: 18px; padding: 18px 16px 8px; }
+  .switch-head { display: flex; justify-content: space-between; align-items: center; padding: 0 4px 14px; }
+  .switch-head .name { font-size: 14px; font-weight: 600; }
+  .switch-head .count { font-size: 11px; color: var(--ink-faint); }
+  .switch-actions { display: flex; gap: 6px; }
+  .switch-actions button { font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; background: var(--panel-raised); color: var(--ink-dim); border: 1px solid var(--hairline); border-radius: 8px; padding: 5px 10px; cursor: pointer; }
+  .switch-actions button.editing { background: var(--amber); color: #000; border-color: var(--amber); }
+  .switch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding-bottom: 12px; }
+  .switch-cell { background: var(--panel-raised); border: 1px solid var(--hairline); border-radius: 13px; padding: 12px 10px 11px; display: flex; flex-direction: column; gap: 8px; position: relative; min-height: 104px; }
+  .switch-cell.on { border-color: rgba(217,142,4,0.4); background: linear-gradient(160deg, rgba(217,142,4,0.10), var(--panel-raised) 60%); }
+  .switch-cell.disabled { opacity: 0.45; }
+  .switch-cell .glyph { font-size: 17px; line-height: 1; opacity: 0.92; }
+  .switch-cell .cname { font-size: 11.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .switch-cell .ch { font-size: 9px; color: var(--ink-faint); letter-spacing: 0.04em; }
+  .switch-cell input.nameedit { width: 100%; font-size: 11.5px; font-weight: 600; background: #0a0a0c; border: 1px solid var(--amber-dim); border-radius: 6px; color: var(--ink); padding: 4px 6px; }
+  .toggle-track { margin-top: auto; width: 38px; height: 22px; border-radius: 20px; background: var(--hairline); position: relative; align-self: flex-end; }
+  .toggle-track.on { background: var(--amber); }
+  .toggle-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.4); transition: transform 0.15s ease; }
+  .toggle-track.on .toggle-thumb { transform: translateX(16px); }
+
+  /* Aux fuel (offline placeholder) */
+  .fuel-panel { margin: 0 16px; background: var(--panel); border: 1px dashed var(--hairline); border-radius: 18px; padding: 20px; text-align: center; color: var(--ink-faint); font-size: 12.5px; }
+
+  .conn-strip { margin: 26px 16px 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .conn-chip { background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; gap: 7px; }
+  .conn-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); flex: none; }
+  .conn-chip .dot.on { background: var(--good); }
+  .conn-chip .txt { font-size: 10px; color: var(--ink-dim); line-height: 1.3; }
+  .conn-chip .txt b { display: block; color: var(--ink); font-size: 12px; font-weight: 600; margin-bottom: 1px; }
+
+  .log { margin: 18px 16px 0; background: var(--panel); border-radius: 10px; padding: 12px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-faint); height: 120px; overflow-y: auto; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="screen">
+
+  <div class="topbar">
+    <div class="title">LC79 Power<span class="dim" id="liveTag"> · Standby</span></div>
+    <div class="clock" id="clock">--:--</div>
+  </div>
+
+  <!-- CONNECT -->
+  <div class="conn-bar">
+    <div class="conn-btn" id="connSolar"><span class="cdot"></span>Solar<span class="sub">tap to connect</span></div>
+    <div class="conn-btn" id="connBattery"><span class="cdot"></span>Battery<span class="sub">tap to connect</span></div>
+    <div class="conn-btn" id="connSwitches"><span class="cdot"></span>Switches<span class="sub">tap to connect</span></div>
+  </div>
+  <div class="keyrow">
+    <div class="lbl">Victron encryption key</div>
+    <input id="solarKey" type="text" placeholder="hex key from VictronConnect" />
+  </div>
+
+  <!-- VICTRON -->
+  <div class="section-label"><span class="dot" id="dotSolar"></span> Solar · Victron SmartSolar <span class="src">BLE advertised</span></div>
+  <div class="victron-panel">
+    <div class="victron-top">
+      <div>
+        <div class="victron-name" id="vName">SmartSolar MPPT</div>
+        <div class="victron-sub" id="vSub">Not connected</div>
+      </div>
+      <div class="victron-yield"><div class="num"><span id="vYield">--</span> <span style="font-size:12px;color:var(--ink-faint);font-weight:500;">kWh</span></div><div class="lbl">Yield today</div></div>
+    </div>
+    <div class="pv-flow">
+      <div class="node"><div class="icon">☀️</div><div class="big"><span id="vPv">--</span><span style="font-size:13px;color:var(--ink-faint);">W</span></div><div class="small">Panel</div></div>
+      <div class="arrow"><div class="line" id="vFlow"></div><div class="pct" id="vAmps">-- A</div></div>
+      <div class="node"><div class="icon">🔋</div><div class="big"><span id="vVolt">--</span><span style="font-size:13px;color:var(--ink-faint);">V</span></div><div class="small">Battery</div></div>
+    </div>
+    <div class="victron-meta">
+      <div class="m"><div class="v"><span class="state-pill" id="vStatePill" style="display:none;"><span class="dot"></span><span id="vState">--</span></span><span id="vStateDash">--</span></div><div class="k">State</div></div>
+      <div class="m"><div class="v" id="vCurrent">--</div><div class="k">Charge current</div></div>
+      <div class="m"><div class="v" id="vLoad">--</div><div class="k">Load</div></div>
+    </div>
+  </div>
+
+  <!-- JUNCTEK -->
+  <div class="section-label"><span class="dot" id="dotBattery"></span> Battery · JuncTek KM-F <span class="src">BLE text frames</span></div>
+  <div class="shunt-panel">
+    <div class="gauge-wrap">
+      <svg viewBox="0 0 132 132">
+        <circle cx="66" cy="66" r="56" fill="none" stroke="#262C33" stroke-width="10" />
+        <circle id="gaugeArc" cx="66" cy="66" r="56" fill="none" stroke="#4ADE9C" stroke-width="10" stroke-linecap="round" stroke-dasharray="351.86" stroke-dashoffset="351.86" />
+      </svg>
+      <div class="gauge-center"><div class="pct"><span id="socText">--</span><span class="sign">%</span></div><div class="lbl">State of charge</div></div>
+    </div>
+    <div class="shunt-stats">
+      <div class="shunt-stat"><span class="k">Voltage</span><span class="v" id="jVolt">-- V</span></div>
+      <div class="shunt-stat"><span class="k">Current</span><span class="v" id="jCurrent">-- A</span></div>
+      <div class="shunt-stat"><span class="k">Power</span><span class="v" id="jPower">-- W</span></div>
+      <div class="shunt-divider"></div>
+      <div class="shunt-stat"><span class="k">Remaining</span><span class="v" id="jRemain">-- Ah</span></div>
+      <div class="shunt-eta">Full capacity <b id="jFull">72 Ah</b></div>
+    </div>
+  </div>
+
+  <!-- MICTUNING -->
+  <div class="section-label"><span class="dot" id="dotSwitches"></span> Switches · MICTUNING P1S <span class="src">BLE write</span></div>
+  <div class="switch-panel">
+    <div class="switch-head">
+      <div><div class="name">12-Gang panel</div><div class="count" id="mCount">Not connected</div></div>
+      <div class="switch-actions">
+        <button id="editNamesBtn">Edit names</button>
+        <button id="allOnBtn">All on</button>
+        <button id="allOffBtn">All off</button>
+      </div>
+    </div>
+    <div class="switch-grid" id="switchGrid"></div>
+  </div>
+
+  <!-- AUX FUEL (offline) -->
+  <div class="section-label"><span class="dot"></span> Aux Tank · Atom Lite Sensor <span class="src">not installed</span></div>
+  <div class="fuel-panel">Aux fuel sensor not built yet — panel reserved for when the Atom Lite hardware is wired.</div>
+
+  <!-- FOOTER -->
+  <div class="conn-strip">
+    <div class="conn-chip"><span class="dot" id="chipSolar"></span><span class="txt"><b>Solar</b><span id="chipSolarTxt">offline</span></span></div>
+    <div class="conn-chip"><span class="dot" id="chipBattery"></span><span class="txt"><b>Battery</b><span id="chipBatteryTxt">offline</span></span></div>
+    <div class="conn-chip"><span class="dot" id="chipSwitches"></span><span class="txt"><b>Switches</b><span id="chipSwitchesTxt">offline</span></span></div>
+    <div class="conn-chip"><span class="dot"></span><span class="txt"><b>Aux tank</b>not installed</span></div>
+  </div>
+
+  <div class="log" id="log"></div>
+</div>
+
+<script src="victron-ble.js?v=8"></script>
+<script src="junctek-shunt-ble.js?v=6"></script>
+<script src="mictuning-ble.js?v=2"></script>
+<script>
+  var DASHBOARD_VERSION = 1;
+  var CHANNEL_COUNT = 12;
+  var BATTERY_AH = 72;
+  var DEFAULT_KEY = '6cc611245a854a60cde278f036c5c98a';
+  var DEFAULT_NAMES = ['Interior','Awning','Fan','Water pump','Fridge','Inverter','Antenna','Slide-out','Heater','Rock lights','Air horn','Aux'];
+  var GLYPHS = ['💡','🔆','🌀','🚰','❄️','🔌','📡','🛗','🔥','💡','🎺','＋'];
+  var GAUGE_C = 351.86;
+
+  var logEl = document.getElementById('log');
+  function log(msg) {
+    var t = new Date().toLocaleTimeString();
+    logEl.textContent += '[' + t + '] ' + msg + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  window.addEventListener('error', function (e) { try { log('[ERROR] ' + e.message + ' @ ' + e.filename + ':' + e.lineno); } catch (x) {} });
+  window.addEventListener('unhandledrejection', function (e) { try { log('[REJECT] ' + ((e.reason && e.reason.message) || e.reason)); } catch (x) {} });
+  log('Dashboard version ' + DASHBOARD_VERSION + '. Drivers: victron v' + (window.__VICTRON_BLE_VERSION__ || '?') + ', junctek v' + (window.__JUNCTEK_BLE_VERSION__ || '?') + '.');
+
+  // ---- clock ----
+  function tick() {
+    var d = new Date();
+    var h = d.getHours(), m = d.getMinutes();
+    var ampm = h >= 12 ? 'PM' : 'AM'; var hh = h % 12; if (hh === 0) hh = 12;
+    document.getElementById('clock').textContent = hh + ':' + (m < 10 ? '0' + m : m) + ' ' + ampm;
+  }
+  tick(); setInterval(tick, 1000);
+
+  // ---- persisted state ----
+  function loadNames() {
+    try { var s = JSON.parse(localStorage.getItem('lc79_names')); if (s && s.length === CHANNEL_COUNT) return s; } catch (e) {}
+    return DEFAULT_NAMES.slice();
+  }
+  function saveNames(n) { try { localStorage.setItem('lc79_names', JSON.stringify(n)); } catch (e) {} }
+  var names = loadNames();
+  var channelState = new Array(CHANNEL_COUNT); for (var i = 0; i < CHANNEL_COUNT; i++) channelState[i] = false;
+  var editMode = false;
+
+  var keyInput = document.getElementById('solarKey');
+  keyInput.value = localStorage.getItem('lc79_victron_key') || DEFAULT_KEY;
+  keyInput.addEventListener('change', function () { localStorage.setItem('lc79_victron_key', keyInput.value.trim()); });
+
+  // ---- connection helpers ----
+  function setConnBtn(id, state) {
+    var el = document.getElementById(id);
+    el.className = 'conn-btn' + (state === 'connected' ? ' connected' : state === 'connecting' ? ' connecting' : '');
+  }
+  function setDot(id, on) { document.getElementById(id).className = 'dot' + (on ? ' live' : ''); }
+  function setChip(id, txtId, on, label) {
+    document.getElementById(id).className = 'dot' + (on ? ' on' : '');
+    document.getElementById(txtId).textContent = label;
+  }
+  function refreshLiveTag() {
+    var any = solarOn || batteryOn || switchesOn;
+    document.getElementById('liveTag').textContent = any ? ' · Live' : ' · Standby';
+  }
+  var solarOn = false, batteryOn = false, switchesOn = false;
+
+  // ================= SOLAR (Victron) =================
+  var victron = null;
+  document.getElementById('connSolar').addEventListener('click', async function () {
+    var key = keyInput.value.trim();
+    if (!key) { log('Enter the Victron encryption key first.'); return; }
+    localStorage.setItem('lc79_victron_key', key);
+    try {
+      setConnBtn('connSolar', 'connecting');
+      victron = new VictronBLE({ encryptionKey: key });
+      victron.onReading(function (d) {
+        if (d.deviceType !== 'solar_charger') return;
+        solarOn = true; setConnBtn('connSolar', 'connected'); setDot('dotSolar', true);
+        setChip('chipSolar', 'chipSolarTxt', true, 'live'); refreshLiveTag();
+        document.getElementById('vSub').textContent = d.deviceStateName || 'Charging';
+        document.getElementById('vYield').textContent = d.yieldToday.toFixed(2);
+        document.getElementById('vPv').textContent = d.pvPower;
+        document.getElementById('vVolt').textContent = d.batteryVoltage.toFixed(2);
+        document.getElementById('vAmps').textContent = d.batteryCurrent.toFixed(1) + ' A';
+        document.getElementById('vCurrent').textContent = d.batteryCurrent.toFixed(1) + ' A';
+        document.getElementById('vLoad').textContent = d.loadCurrent.toFixed(1) + ' A';
+        document.getElementById('vFlow').className = 'line' + (d.pvPower > 0 ? ' active' : '');
+        var pill = document.getElementById('vStatePill'), dash = document.getElementById('vStateDash');
+        pill.style.display = 'inline-flex'; dash.style.display = 'none';
+        document.getElementById('vState').textContent = d.deviceStateName || '--';
+      });
+      var name = await victron.addDevice();
+      log('Solar listening: ' + name);
+    } catch (err) {
+      log('Solar connect failed: ' + err.message); setConnBtn('connSolar', '');
+    }
+  });
+
+  // ================= BATTERY (JuncTek) =================
+  var shunt = null;
+  document.getElementById('connBattery').addEventListener('click', async function () {
+    try {
+      setConnBtn('connBattery', 'connecting');
+      shunt = new JuncTekShunt({ batteryCapacityAh: BATTERY_AH });
+      shunt.onConnectionChange(function (s) {
+        if (!s.connected) { batteryOn = false; setDot('dotBattery', false); setChip('chipBattery','chipBatteryTxt', false, 'reconnecting'); refreshLiveTag(); }
+      });
+      shunt.onReading(function (r) {
+        if (!r.connected) return;
+        batteryOn = true; setConnBtn('connBattery', 'connected'); setDot('dotBattery', true);
+        setChip('chipBattery', 'chipBatteryTxt', true, 'live'); refreshLiveTag();
+        if (r.voltage != null) document.getElementById('jVolt').textContent = r.voltage.toFixed(2) + ' V';
+        if (r.current != null) {
+          var charging = r.current > 0.05;
+          var cEl = document.getElementById('jCurrent');
+          cEl.textContent = (charging ? '+' : '') + r.current.toFixed(2) + ' A';
+          cEl.className = 'v ' + (charging ? 'charging' : 'discharging');
+        }
+        if (r.power != null) document.getElementById('jPower').textContent = Math.round(r.power) + ' W';
+        if (r.remainingAh != null) document.getElementById('jRemain').textContent = r.remainingAh.toFixed(1) + ' Ah';
+        if (r.fullCapacityAh) document.getElementById('jFull').textContent = r.fullCapacityAh + ' Ah';
+        if (r.socPercent != null) setGauge(r.socPercent);
+      });
+      var name = await shunt.connect();
+      log('Battery connected: ' + name);
+    } catch (err) {
+      log('Battery connect failed: ' + err.message); setConnBtn('connBattery', '');
+    }
+  });
+
+  function setGauge(soc) {
+    soc = Math.max(0, Math.min(100, soc));
+    document.getElementById('socText').textContent = soc;
+    var arc = document.getElementById('gaugeArc');
+    arc.setAttribute('stroke-dashoffset', (GAUGE_C * (1 - soc / 100)).toFixed(1));
+    var color = soc > 50 ? '#4ADE9C' : soc > 20 ? '#D98E04' : '#E5484D';
+    arc.setAttribute('stroke', color);
+  }
+
+  // ================= SWITCHES (MICTUNING) =================
+  var panel = null;
+  document.getElementById('connSwitches').addEventListener('click', async function () {
+    try {
+      setConnBtn('connSwitches', 'connecting');
+      panel = new MictuningPanel();
+      panel.onConnectionChange(function (s) {
+        if (s.connected) {
+          switchesOn = true; setConnBtn('connSwitches', 'connected'); setDot('dotSwitches', true);
+          setChip('chipSwitches', 'chipSwitchesTxt', true, 'live'); refreshLiveTag();
+          document.getElementById('mCount').textContent = countOn() + ' of 12 on';
+        } else {
+          switchesOn = false; setDot('dotSwitches', false); setChip('chipSwitches','chipSwitchesTxt', false, 'reconnecting'); refreshLiveTag();
+        }
+      });
+      var name = await panel.connect();
+      log('Switches connected: ' + name);
+    } catch (err) {
+      log('Switches connect failed: ' + err.message); setConnBtn('connSwitches', '');
+    }
+  });
+
+  function countOn() { var c = 0; for (var i = 0; i < CHANNEL_COUNT; i++) if (channelState[i]) c++; return c; }
+  function updateCount() {
+    if (switchesOn) document.getElementById('mCount').textContent = countOn() + ' of 12 on';
+  }
+
+  async function toggleChannel(idx) {
+    if (!panel) { log('Connect the switch panel first.'); return; }
+    var next = !channelState[idx];
+    try {
+      await panel.setChannel(idx, next);
+      channelState[idx] = next; renderGrid(); updateCount();
+      log('CH ' + (idx + 1) + ' (' + names[idx] + ') -> ' + (next ? 'ON' : 'OFF'));
+    } catch (err) { log('Toggle CH ' + (idx + 1) + ' failed: ' + err.message); }
+  }
+
+  document.getElementById('allOnBtn').addEventListener('click', async function () {
+    if (!panel) { log('Connect the switch panel first.'); return; }
+    try { await panel.setAll(true); for (var i = 0; i < CHANNEL_COUNT; i++) channelState[i] = true; renderGrid(); updateCount(); log('All channels ON'); }
+    catch (err) { log('All on failed: ' + err.message); }
+  });
+  document.getElementById('allOffBtn').addEventListener('click', async function () {
+    if (!panel) { log('Connect the switch panel first.'); return; }
+    try { await panel.setAll(false); for (var i = 0; i < CHANNEL_COUNT; i++) channelState[i] = false; renderGrid(); updateCount(); log('All channels OFF'); }
+    catch (err) { log('All off failed: ' + err.message); }
+  });
+
+  // ---- rename mode ----
+  document.getElementById('editNamesBtn').addEventListener('click', function () {
+    var btn = this;
+    if (!editMode) {
+      editMode = true; btn.textContent = 'Save names'; btn.className = 'editing'; renderGrid();
+    } else {
+      // read inputs
+      var inputs = document.querySelectorAll('#switchGrid input.nameedit');
+      for (var i = 0; i < inputs.length; i++) {
+        var idx = parseInt(inputs[i].getAttribute('data-idx'), 10);
+        var val = inputs[i].value.trim();
+        names[idx] = val || DEFAULT_NAMES[idx];
+      }
+      saveNames(names); editMode = false; btn.textContent = 'Edit names'; btn.className = ''; renderGrid();
+      log('Channel names saved.');
+    }
+  });
+
+  // ---- render switch grid ----
+  function renderGrid() {
+    var grid = document.getElementById('switchGrid');
+    grid.innerHTML = '';
+    for (var i = 0; i < CHANNEL_COUNT; i++) {
+      var cell = document.createElement('div');
+      var on = channelState[i];
+      cell.className = 'switch-cell' + (on ? ' on' : '') + (editMode ? '' : (panel ? '' : ' disabled'));
+      var nameHtml = editMode
+        ? '<input class="nameedit" data-idx="' + i + '" value="' + escapeHtml(names[i]) + '" maxlength="16" />'
+        : '<div class="cname">' + escapeHtml(names[i]) + '</div>';
+      cell.innerHTML =
+        '<div class="glyph">' + GLYPHS[i] + '</div>' +
+        nameHtml +
+        '<div class="ch">CH ' + (i + 1) + '</div>' +
+        '<div class="toggle-track' + (on ? ' on' : '') + '"><div class="toggle-thumb"></div></div>';
+      if (!editMode) {
+        (function (idx) { cell.addEventListener('click', function () { toggleChannel(idx); }); })(i);
+      }
+      grid.appendChild(cell);
+    }
+  }
+  function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  renderGrid();
+</script>
+</body>
+</html>
