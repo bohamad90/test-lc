@@ -78,7 +78,7 @@
 
 <div class="log" id="log"></div>
 
-<script src="victron-ble.js"></script>
+<script src="victron-ble.js?v=2"></script>
 <script>
   var victron = null;
 
@@ -102,6 +102,8 @@
     logEl.textContent += '[' + time + '] ' + msg + '\n';
     logEl.scrollTop = logEl.scrollHeight;
   }
+
+  log('Script version loaded: ' + (window.__VICTRON_BLE_VERSION__ || 'UNKNOWN -- old cached file is still running!'));
 
   addBtn.addEventListener('click', async function () {
     var key = keyInput.value.trim();
