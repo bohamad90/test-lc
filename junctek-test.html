@@ -36,9 +36,17 @@
     flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #374151;
     background: #18181b; color: #f4f4f5; font-family: monospace;
   }
+  #errorBanner {
+    display: none;
+    background: #7f1d1d; color: #fecaca; border: 2px solid #ef4444;
+    border-radius: 10px; padding: 14px; margin-bottom: 16px;
+    font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all;
+  }
 </style>
 </head>
 <body>
+
+<div id="errorBanner"></div>
 
 <h1>JuncTek KM-F Shunt Protocol Test</h1>
 <div class="sub">Standalone test page. Open this in Bluefy on iPad/iPhone, or Chrome on desktop/Android.</div>
@@ -80,27 +88,53 @@
 
 <div class="log" id="log"></div>
 
-<script src="junctek-shunt-ble.js?v=2"></script>
+<script src="junctek-shunt-ble.js?v=3"></script>
 <script>
-  const shunt = new JuncTekShunt();
-
-  const logEl = document.getElementById('log');
-  const statusBar = document.getElementById('statusBar');
-  const connectBtn = document.getElementById('connectBtn');
-  const sendBtn = document.getElementById('sendBtn');
-  const cmdInput = document.getElementById('cmdInput');
-
   function log(msg) {
-    const time = new Date().toLocaleTimeString();
+    var logEl = document.getElementById('log');
+    var time = new Date().toLocaleTimeString();
     logEl.textContent += '[' + time + '] ' + msg + '\n';
     logEl.scrollTop = logEl.scrollHeight;
   }
+
+  window.addEventListener('error', function(event) {
+    var msg = '[GLOBAL ERROR] ' + event.message + ' at ' + event.filename + ':' + event.lineno;
+    document.title = 'ERROR: ' + event.message;
+    try { log(msg); } catch (e) {}
+    var banner = document.getElementById('errorBanner');
+    if (banner) {
+      banner.style.display = 'block';
+      banner.textContent = msg;
+    }
+  });
+
+  window.addEventListener('unhandledrejection', function(event) {
+    var reasonMsg = (event.reason && event.reason.message) ? event.reason.message : event.reason;
+    var msg = '[UNHANDLED PROMISE REJECTION] ' + reasonMsg;
+    document.title = 'ERROR: ' + msg;
+    try { log(msg); } catch (e) {}
+    var banner = document.getElementById('errorBanner');
+    if (banner) {
+      banner.style.display = 'block';
+      banner.textContent = msg;
+    }
+  });
+
+  var shunt = new JuncTekShunt();
+
+  log('Script version loaded: ' + (window.__JUNCTEK_BLE_VERSION__ || 'UNKNOWN -- old cached file is still running!'));
+
+  var logEl = document.getElementById('log');
+  var statusBar = document.getElementById('statusBar');
+  var connectBtn = document.getElementById('connectBtn');
+  var sendBtn = document.getElementById('sendBtn');
+  var cmdInput = document.getElementById('cmdInput');
 
   connectBtn.addEventListener('click', async function() {
     try {
       connectBtn.disabled = true;
       connectBtn.textContent = 'Connecting...';
-      const name = await shunt.connect();
+      var name = await shunt.connect();
       statusBar.textContent = 'Connected: ' + name;
       connectBtn.textContent = 'Connected: ' + name;
       sendBtn.disabled = false;
@@ -108,7 +142,11 @@
       log('Service UUID: ' + shunt.service.uuid);
       log('Notify char: ' + shunt.notifyChar.uuid + ', Write char: ' + shunt.writeChar.uuid);
     } catch (err) {
-      log('Connection failed: ' + err.message);
+      var fullMsg = 'Connection failed: ' + err.message + '\nStack: ' + (err.stack || '(no stack)');
+      log(fullMsg);
+      var banner = document.getElementById('errorBanner');
+      banner.style.display = 'block';
+      banner.textContent = fullMsg;
       statusBar.textContent = 'Connection failed - see log.';
       connectBtn.disabled = false;
       connectBtn.textContent = 'Connect to Shunt';
@@ -116,7 +154,7 @@
   });
 
   sendBtn.addEventListener('click', async function() {
-    const cmd = cmdInput.value || ':r00=86.';
+    var cmd = cmdInput.value || ':r00=86.';
     try {
       await shunt.sendRaw(cmd);
       log('Sent raw: ' + cmd);
@@ -147,12 +185,21 @@
     document.getElementById('soc').textContent = data.socPercent !== null ? data.socPercent : '--';
     document.getElementById('remaining').textContent = data.remainingAh !== null ? data.remainingAh.toFixed(1) : '--';
     document.getElementById('capacity').textContent = data.fullCapacityAh !== null ? data.fullCapacityAh : '--';
-    log('Reading - V:' + (data.voltage !== null ? data.voltage.toFixed(2) : '--') + ' I:' + (data.current !== null ? data.current.toFixed(2) : '--') + ' P:' + (data.power !== null ? data.power.toFixed(1) : '--') + ' SOC:' + data.socPercent + '%');
+    var vStr = data.voltage !== null ? data.voltage.toFixed(2) : '--';
+    var iStr = data.current !== null ? data.current.toFixed(2) : '--';
+    var pStr = data.power !== null ? data.power.toFixed(1) : '--';
+    log('Reading - V:' + vStr + ' I:' + iStr + ' P:' + pStr + ' SOC:' + data.socPercent + '%');
   });
 
   shunt.onRawFrame(function(frame) {
     log('Raw frame [' + frame.letter + ']: ' + JSON.stringify(frame.values));
   });
+
+  var heartbeatCount = 0;
+  setInterval(function() {
+    heartbeatCount++;
+    log('(heartbeat ' + heartbeatCount + ' - page has been running this long without reloading)');
+  }, 2000);
 </script>
 
 </body>
