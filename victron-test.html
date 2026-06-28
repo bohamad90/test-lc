@@ -115,6 +115,10 @@
       addBtn.textContent = 'Opening picker...';
       victron = new VictronBLE({ encryptionKey: key });
 
+      victron.onDebug(function (msg) {
+        log('[debug] ' + msg);
+      });
+
       victron.onReading(function (data) {
         log('Reading [' + data.deviceType + ']: ' + JSON.stringify(data));
         if (data.deviceType === 'solar_charger') {
