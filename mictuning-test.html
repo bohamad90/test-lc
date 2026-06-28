@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>JuncTek KM-F Shunt Protocol Test</title>
+<title>MICTUNING Panel Protocol Test</title>
 <style>
-  :root { --bg: #111; --card: #1b1b1f; --accent: #f59e0b; --good: #22c55e; }
+  :root { --bg: #111; --card: #1b1b1f; --accent: #3b82f6; --on: #22c55e; --off: #4b5563; }
   * { box-sizing: border-box; }
   body {
     background: var(--bg); color: #f4f4f5; font-family: -apple-system, system-ui, sans-serif;
@@ -15,189 +15,174 @@
   .sub { color: #9ca3af; font-size: 13px; margin-bottom: 20px; }
   button {
     font-size: 16px; padding: 12px 18px; border-radius: 10px; border: none;
-    background: var(--accent); color: #111; cursor: pointer; font-weight: 600;
+    background: var(--accent); color: white; cursor: pointer; font-weight: 600;
   }
   button:disabled { background: #374151; color: #6b7280; }
   #connectBtn { width: 100%; margin-bottom: 20px; }
-  .readings { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
-  .reading-card {
-    background: var(--card); border-radius: 14px; padding: 18px; text-align: center;
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 24px; }
+  .channel {
+    background: var(--card); border-radius: 14px; padding: 16px; text-align: center;
+    border: 2px solid var(--off); transition: border-color 0.15s;
   }
-  .reading-card .label { font-size: 12px; color: #9ca3af; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .reading-card .value { font-size: 28px; font-weight: 700; }
-  .reading-card .unit { font-size: 13px; color: #9ca3af; margin-left: 4px; }
-  .status-bar { font-size: 13px; color: #9ca3af; margin-bottom: 12px; }
+  .channel.on { border-color: var(--on); }
+  .channel .label { font-size: 13px; color: #9ca3af; margin-bottom: 8px; }
+  .channel button { width: 100%; background: var(--off); }
+  .channel.on button { background: var(--on); }
   .log {
     background: var(--card); border-radius: 10px; padding: 14px; font-family: monospace;
-    font-size: 12px; color: #a1a1aa; height: 240px; overflow-y: auto; white-space: pre-wrap;
+    font-size: 12px; color: #a1a1aa; height: 220px; overflow-y: auto; white-space: pre-wrap;
   }
-  .send-row { display: flex; gap: 8px; margin-bottom: 12px; }
-  .send-row input {
-    flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #374151;
-    background: #18181b; color: #f4f4f5; font-family: monospace;
-  }
-  #errorBanner {
-    display: none;
-    background: #7f1d1d; color: #fecaca; border: 2px solid #ef4444;
-    border-radius: 10px; padding: 14px; margin-bottom: 16px;
-    font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all;
-  }
+  .status-bar { font-size: 13px; color: #9ca3af; margin-bottom: 12px; }
 </style>
 </head>
 <body>
 
-<div id="errorBanner"></div>
-
-<h1>JuncTek KM-F Shunt Protocol Test</h1>
+<h1>MICTUNING Panel Protocol Test</h1>
 <div class="sub">Standalone test page. Open this in Bluefy on iPad/iPhone, or Chrome on desktop/Android.</div>
 
-<button id="connectBtn">Connect to Shunt</button>
+<button id="connectBtn">Connect to Panel</button>
 <div class="status-bar" id="statusBar">Not connected.</div>
 
-<div class="readings">
-  <div class="reading-card">
-    <div class="label">Voltage</div>
-    <div class="value"><span id="voltage">--</span><span class="unit">V</span></div>
-  </div>
-  <div class="reading-card">
-    <div class="label">Current</div>
-    <div class="value"><span id="current">--</span><span class="unit">A</span></div>
-  </div>
-  <div class="reading-card">
-    <div class="label">Power</div>
-    <div class="value"><span id="power">--</span><span class="unit">W</span></div>
-  </div>
-  <div class="reading-card">
-    <div class="label">State of Charge</div>
-    <div class="value"><span id="soc">--</span><span class="unit">%</span></div>
-  </div>
-  <div class="reading-card">
-    <div class="label">Remaining</div>
-    <div class="value"><span id="remaining">--</span><span class="unit">Ah</span></div>
-  </div>
-  <div class="reading-card">
-    <div class="label">Full Capacity</div>
-    <div class="value"><span id="capacity">--</span><span class="unit">Ah</span></div>
-  </div>
-</div>
+<div class="grid" id="channelGrid"></div>
 
-<div class="send-row">
-  <input id="cmdInput" type="text" placeholder=":r00=86." />
-  <button id="sendBtn" disabled>Send</button>
+<div style="margin-bottom: 12px;">
+  <button id="allOnBtn" disabled>All On</button>
+  <button id="allOffBtn" disabled>All Off</button>
+  <button id="queryBtn" disabled>Query Status</button>
 </div>
 
 <div class="log" id="log"></div>
 
-<script src="junctek-shunt-ble.js"></script>
+<script src="mictuning-ble.js"></script>
 <script>
+  var CHANNEL_COUNT = 12; // P1S 12-gang panel
+  var panel = new MictuningPanel();
+  var channelState = new Array(CHANNEL_COUNT).fill(false);
+
+  var grid = document.getElementById('channelGrid');
+  var logEl = document.getElementById('log');
+  var statusBar = document.getElementById('statusBar');
+  var connectBtn = document.getElementById('connectBtn');
+  var allOnBtn = document.getElementById('allOnBtn');
+  var allOffBtn = document.getElementById('allOffBtn');
+  var queryBtn = document.getElementById('queryBtn');
+
+  window.addEventListener('error', function (event) {
+    var msg = '[GLOBAL ERROR] ' + event.message + ' at ' + event.filename + ':' + event.lineno;
+    try { log(msg); } catch (e) {}
+  });
+
+  window.addEventListener('unhandledrejection', function (event) {
+    var reasonMsg = (event.reason && event.reason.message) ? event.reason.message : event.reason;
+    try { log('[UNHANDLED PROMISE REJECTION] ' + reasonMsg); } catch (e) {}
+  });
+
   function log(msg) {
-    var logEl = document.getElementById('log');
     var time = new Date().toLocaleTimeString();
     logEl.textContent += '[' + time + '] ' + msg + '\n';
     logEl.scrollTop = logEl.scrollHeight;
   }
 
-  window.addEventListener('error', function(event) {
-    var msg = '[GLOBAL ERROR] ' + event.message + ' at ' + event.filename + ':' + event.lineno;
-    document.title = 'ERROR: ' + event.message;
-    try { log(msg); } catch (e) {}
-    var banner = document.getElementById('errorBanner');
-    if (banner) {
-      banner.style.display = 'block';
-      banner.textContent = msg;
+  function buildGrid() {
+    grid.innerHTML = '';
+    for (var i = 0; i < CHANNEL_COUNT; i++) {
+      var div = document.createElement('div');
+      div.className = 'channel';
+      div.id = 'ch-' + i;
+      div.innerHTML = '<div class="label">Channel ' + (i + 1) + '</div><button data-idx="' + i + '">Toggle</button>';
+      grid.appendChild(div);
     }
-  });
+    var buttons = grid.querySelectorAll('button');
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var idx = parseInt(btn.dataset.idx, 10);
+        var newState = !channelState[idx];
+        btn.disabled = true;
+        try {
+          await panel.setChannel(idx, newState);
+          channelState[idx] = newState;
+          document.getElementById('ch-' + idx).classList.toggle('on', newState);
+          log('Channel ' + (idx + 1) + ' -> ' + (newState ? 'ON' : 'OFF'));
+        } catch (err) {
+          log('ERROR toggling channel ' + (idx + 1) + ': ' + err.message);
+        }
+        btn.disabled = false;
+      });
+    });
+  }
 
-  window.addEventListener('unhandledrejection', function(event) {
-    var reasonMsg = (event.reason && event.reason.message) ? event.reason.message : event.reason;
-    var msg = '[UNHANDLED PROMISE REJECTION] ' + reasonMsg;
-    document.title = 'ERROR: ' + msg;
-    try { log(msg); } catch (e) {}
-    var banner = document.getElementById('errorBanner');
-    if (banner) {
-      banner.style.display = 'block';
-      banner.textContent = msg;
-    }
-  });
-
-  var shunt = new JuncTekShunt();
-
-  var logEl = document.getElementById('log');
-  var statusBar = document.getElementById('statusBar');
-  var connectBtn = document.getElementById('connectBtn');
-  var sendBtn = document.getElementById('sendBtn');
-  var cmdInput = document.getElementById('cmdInput');
-
-  connectBtn.addEventListener('click', async function() {
+  connectBtn.addEventListener('click', async function () {
     try {
       connectBtn.disabled = true;
       connectBtn.textContent = 'Connecting...';
-      var name = await shunt.connect();
+      var name = await panel.connect();
       statusBar.textContent = 'Connected: ' + name;
       connectBtn.textContent = 'Connected: ' + name;
-      sendBtn.disabled = false;
+      [allOnBtn, allOffBtn, queryBtn].forEach(function (b) { b.disabled = false; });
       log('Connected to ' + name);
-      log('Service UUID: ' + shunt.service.uuid);
-      log('Notify char: ' + shunt.notifyChar.uuid + ', Write char: ' + shunt.writeChar.uuid);
     } catch (err) {
-      var fullMsg = 'Connection failed: ' + err.message + '\nStack: ' + (err.stack || '(no stack)');
-      log(fullMsg);
-      var banner = document.getElementById('errorBanner');
-      banner.style.display = 'block';
-      banner.textContent = fullMsg;
+      log('Connection failed: ' + err.message);
       statusBar.textContent = 'Connection failed - see log.';
       connectBtn.disabled = false;
-      connectBtn.textContent = 'Connect to Shunt';
+      connectBtn.textContent = 'Connect to Panel';
     }
   });
 
-  sendBtn.addEventListener('click', async function() {
-    var cmd = cmdInput.value || ':r00=86.';
+  allOnBtn.addEventListener('click', async function () {
     try {
-      await shunt.sendRaw(cmd);
-      log('Sent raw: ' + cmd);
+      await panel.setAll(true);
+      for (var i = 0; i < CHANNEL_COUNT; i++) {
+        channelState[i] = true;
+        document.getElementById('ch-' + i).classList.add('on');
+      }
+      log('All channels -> ON');
     } catch (err) {
-      log('Send failed: ' + err.message);
+      log('ERROR (All On): ' + err.message);
     }
   });
 
-  shunt.onConnectionChange(function(info) {
-    if (info.connected) {
-      statusBar.textContent = info.reconnected ? 'Reconnected.' : 'Connected.';
-      log(info.reconnected ? 'Auto-reconnected to shunt.' : 'Connection established.');
-    } else {
-      statusBar.textContent = 'Disconnected - will auto-reconnect when possible.';
+  allOffBtn.addEventListener('click', async function () {
+    try {
+      await panel.setAll(false);
+      for (var i = 0; i < CHANNEL_COUNT; i++) {
+        channelState[i] = false;
+        document.getElementById('ch-' + i).classList.remove('on');
+      }
+      log('All channels -> OFF');
+    } catch (err) {
+      log('ERROR (All Off): ' + err.message);
+    }
+  });
+
+  queryBtn.addEventListener('click', async function () {
+    try {
+      await panel.requestStatus();
+      log('Status query sent.');
+    } catch (err) {
+      log('ERROR (Query Status): ' + err.message);
+    }
+  });
+
+  panel.onConnectionChange(function (state) {
+    if (!state.connected) {
+      statusBar.textContent = 'Disconnected.';
+      connectBtn.textContent = 'Connect to Panel';
+      connectBtn.disabled = false;
+      [allOnBtn, allOffBtn, queryBtn].forEach(function (b) { b.disabled = true; });
       log('Disconnected. Will retry automatically.');
     }
   });
 
-  shunt.onReading(function(data) {
-    if (!data.connected) {
+  panel.onStatus(function (status) {
+    if (!status.connected) {
       statusBar.textContent = 'Disconnected.';
-      log('Shunt disconnected.');
+      log('Panel disconnected.');
       return;
     }
-    document.getElementById('voltage').textContent = data.voltage !== null ? data.voltage.toFixed(2) : '--';
-    document.getElementById('current').textContent = data.current !== null ? data.current.toFixed(2) : '--';
-    document.getElementById('power').textContent = data.power !== null ? data.power.toFixed(1) : '--';
-    document.getElementById('soc').textContent = data.socPercent !== null ? data.socPercent : '--';
-    document.getElementById('remaining').textContent = data.remainingAh !== null ? data.remainingAh.toFixed(1) : '--';
-    document.getElementById('capacity').textContent = data.fullCapacityAh !== null ? data.fullCapacityAh : '--';
-    var vStr = data.voltage !== null ? data.voltage.toFixed(2) : '--';
-    var iStr = data.current !== null ? data.current.toFixed(2) : '--';
-    var pStr = data.power !== null ? data.power.toFixed(1) : '--';
-    log('Reading - V:' + vStr + ' I:' + iStr + ' P:' + pStr + ' SOC:' + data.socPercent + '%');
+    log('Status notify - raw hex: ' + status.raw + ' | panelOn: ' + status.panelOn + ' | channels: ' + JSON.stringify(status.channels));
   });
 
-  shunt.onRawFrame(function(frame) {
-    log('Raw frame [' + frame.letter + ']: ' + JSON.stringify(frame.values));
-  });
-
-  var heartbeatCount = 0;
-  setInterval(function() {
-    heartbeatCount++;
-    log('(heartbeat ' + heartbeatCount + ' - page has been running this long without reloading)');
-  }, 2000);
+  buildGrid();
 </script>
 
 </body>
