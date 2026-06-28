@@ -22,7 +22,7 @@
  *   // device starts streaming automatically after the initial handshake command
  */
 
-const DEFAULT_PASSWORD = '11223344';
+const DEFAULT_PASSWORD = '11223344';  console.log('>>> junctek-shunt-ble.js VERSION 3 LOADED <<<'); if (typeof window !== 'undefined') {   window.__JUNCTEK_BLE_VERSION__ = 3; }
 
 class JuncTekShunt {
   constructor(opts = {}) {
