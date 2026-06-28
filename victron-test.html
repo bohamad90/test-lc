@@ -1,15 +1,146 @@
-Victron Instant Readout — Protocol Test
-Standalone test page. Open this in Bluefy on iPad/iPhone (Bluefy's watchAdvertisements support is required), or Chrome on desktop/Android.
-This does not connect to your Victron device — it passively listens to the encrypted status broadcasts it's already sending. You need the device's encryption key first: open VictronConnect → your device → gear icon → Product Info → Instant Readout via Bluetooth → enable it → tap Show under Instant Readout Details.
-Encryption key (hex, from VictronConnect)
-Add Victron Device
-Not connected.
-BATTERY VOLTAGE
---V
-CURRENT
---A
-PV POWER
---W
-YIELD TODAY
---kWh
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Victron Instant Readout Test</title>
+<style>
+  :root { --bg: #111; --card: #1b1b1f; --accent: #3b82f6; }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: #f4f4f5; font-family: -apple-system, system-ui, sans-serif;
+    margin: 0; padding: 24px; min-height: 100vh;
+  }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #9ca3af; font-size: 13px; margin-bottom: 16px; }
+  .note {
+    background: var(--card); border-radius: 10px; padding: 14px; font-size: 13px;
+    color: #d1d5db; margin-bottom: 20px; line-height: 1.5;
+  }
+  label { display: block; font-size: 13px; color: #9ca3af; margin-bottom: 6px; }
+  input[type="text"] {
+    width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #374151;
+    background: #18181b; color: #f4f4f5; font-size: 15px; margin-bottom: 14px;
+  }
+  button {
+    font-size: 16px; padding: 12px 18px; border-radius: 10px; border: none;
+    background: var(--accent); color: white; cursor: pointer; font-weight: 600; width: 100%;
+  }
+  button:disabled { background: #374151; color: #6b7280; }
+  .status-bar { font-size: 13px; color: #9ca3af; margin: 12px 0; }
+  .readings { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
+  .reading-card { background: var(--card); border-radius: 14px; padding: 16px; }
+  .reading-card .label { font-size: 13px; color: #9ca3af; margin-bottom: 6px; }
+  .reading-card .value { font-size: 26px; font-weight: 700; }
+  .reading-card .unit { font-size: 14px; color: #9ca3af; margin-left: 4px; }
+  .log {
+    background: var(--card); border-radius: 10px; padding: 14px; font-family: monospace;
+    font-size: 12px; color: #a1a1aa; height: 220px; overflow-y: auto; white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
 
+<h1>Victron Instant Readout Test</h1>
+<div class="sub">Standalone test page. Open this in Bluefy on iPad/iPhone (Bluefy's watchAdvertisements support is required), or Chrome on desktop/Android.</div>
+
+<div class="note">
+  This does <b>not</b> connect to your Victron device - it passively listens to the encrypted
+  status broadcasts it's already sending. You need the device's <b>encryption key</b> first:
+  open VictronConnect, select your device, tap the gear icon, Product Info, Instant Readout via
+  Bluetooth, make sure it's enabled, then tap Show under Instant Readout Details.
+</div>
+
+<label for="keyInput">Encryption key (hex, from VictronConnect)</label>
+<input id="keyInput" type="text" placeholder="e.g. a1b2c3d4e5f6..." />
+
+<button id="addBtn">Add Victron Device</button>
+<div class="status-bar" id="statusBar">Not connected.</div>
+
+<div class="readings" id="readingsGrid">
+  <div class="reading-card">
+    <div class="label">Battery Voltage</div>
+    <div class="value"><span id="voltage">--</span><span class="unit">V</span></div>
+  </div>
+  <div class="reading-card">
+    <div class="label">Current</div>
+    <div class="value"><span id="current">--</span><span class="unit">A</span></div>
+  </div>
+  <div class="reading-card">
+    <div class="label">PV Power</div>
+    <div class="value"><span id="pvPower">--</span><span class="unit">W</span></div>
+  </div>
+  <div class="reading-card">
+    <div class="label">Yield Today</div>
+    <div class="value"><span id="yieldToday">--</span><span class="unit">kWh</span></div>
+  </div>
+</div>
+
+<div class="log" id="log"></div>
+
+<script src="victron-ble.js"></script>
+<script>
+  var victron = null;
+
+  var logEl = document.getElementById('log');
+  var statusBar = document.getElementById('statusBar');
+  var addBtn = document.getElementById('addBtn');
+  var keyInput = document.getElementById('keyInput');
+
+  window.addEventListener('error', function (event) {
+    var msg = '[GLOBAL ERROR] ' + event.message + ' at ' + event.filename + ':' + event.lineno;
+    try { log(msg); } catch (e) {}
+  });
+
+  window.addEventListener('unhandledrejection', function (event) {
+    var reasonMsg = (event.reason && event.reason.message) ? event.reason.message : event.reason;
+    try { log('[UNHANDLED PROMISE REJECTION] ' + reasonMsg); } catch (e) {}
+  });
+
+  function log(msg) {
+    var time = new Date().toLocaleTimeString();
+    logEl.textContent += '[' + time + '] ' + msg + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  addBtn.addEventListener('click', async function () {
+    var key = keyInput.value.trim();
+    if (!key) {
+      log('Enter the encryption key first.');
+      return;
+    }
+
+    try {
+      addBtn.disabled = true;
+      addBtn.textContent = 'Opening picker...';
+      victron = new VictronBLE({ encryptionKey: key });
+
+      victron.onReading(function (data) {
+        log('Reading [' + data.deviceType + ']: ' + JSON.stringify(data));
+        if (data.deviceType === 'solar_charger') {
+          document.getElementById('voltage').textContent = data.batteryVoltage.toFixed(2);
+          document.getElementById('current').textContent = data.batteryCurrent.toFixed(2);
+          document.getElementById('pvPower').textContent = data.pvPower;
+          document.getElementById('yieldToday').textContent = data.yieldToday.toFixed(2);
+          log('Charger state: ' + data.deviceStateName);
+        } else if (data.deviceType === 'battery_monitor') {
+          document.getElementById('voltage').textContent = data.voltage.toFixed(2);
+          document.getElementById('current').textContent = data.current.toFixed(2);
+        }
+      });
+
+      var name = await victron.addDevice();
+      statusBar.textContent = 'Listening: ' + name;
+      addBtn.textContent = 'Listening: ' + name;
+      log('Added device: ' + name + '. Waiting for advertisements (should arrive every ~1s)...');
+    } catch (err) {
+      log('Failed: ' + err.message);
+      statusBar.textContent = 'Failed - see log.';
+      addBtn.disabled = false;
+      addBtn.textContent = 'Add Victron Device';
+    }
+  });
+</script>
+
+</body>
+</html>
