@@ -118,7 +118,10 @@ class VictronBLE {
 
     var self = this;
 
-    this.device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true });
+    this.device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalManufacturerData: [0x02e1],
+    });
 
     if (typeof this.device.watchAdvertisements !== 'function') {
       throw new Error(
@@ -361,9 +364,9 @@ if (typeof module !== 'undefined' && module.exports) {
   window.VictronBLE = VictronBLE;
 }
 
-console.log('>>> victron-ble.js VERSION 3 LOADED <<<');
+console.log('>>> victron-ble.js VERSION 4 LOADED <<<');
 if (typeof window !== 'undefined') {
-  window.__VICTRON_BLE_VERSION__ = 3;
+  window.__VICTRON_BLE_VERSION__ = 4;
 }
 
 // Victron's charger device-state enum, per the published Instant Readout spec / VE.Direct
