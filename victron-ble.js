@@ -10,7 +10,10 @@
  * Protocol: officially documented by Victron ("Extra manufacturer data" PDF), AES-128-CTR
  * encrypted, manufacturer ID 0x02E1. This implementation mirrors the well-established
  * keshavdv/victron-ble (Python) and node-red-contrib-victron-ble (TypeScript) community
- * implementations, ported to Web Crypto.
+ * implementations, ported to the browser's native Web Crypto API.
+ *
+ * Confirmed for: SmartSolar MPPT 100/30. This model is a standard "Solar Charger" device
+ * class in Victron's Instant Readout spec -- no model-specific quirks.
  *
  * You'll need your device's encryption key first -- get it from the VictronConnect app:
  *   Settings > Product Info > Instant Readout via Bluetooth > Show (under "Instant Readout Details")
@@ -20,29 +23,46 @@
  * object, which can only be obtained via the user-gesture device picker (requestDevice). There
  * is no "scan for any nearby device" API on iOS the way there is with native Core Bluetooth or
  * desktop tools like bleak/noble. So the flow here is:
- *   1. User taps "Add Victron device" -> opens the OS picker (filtered as best as possible)
+ *   1. User taps "Add Victron Device" -> opens the OS picker (unfiltered, since Victron
+ *      doesn't reliably expose a filterable service UUID in the legacy advertisement)
  *   2. Once picked, we call watchAdvertisements() and listen passively from then on
- *   3. No GATT connection is ever made -- this is a pure listen, which is also why it's
- *      very battery-friendly and immune to the connection-drop issues GATT clients have.
+ *   3. No GATT connection is ever made -- this is a pure listen, which is also why it's very
+ *      battery-friendly and immune to the connection-drop issues GATT clients have.
  *
  * Usage:
- *   const victron = new VictronBLE({ encryptionKey: 'a1b2c3...' }); // hex string from VictronConnect
- *   await victron.addDevice();             // opens device picker once
- *   victron.onReading((data) => { ... });  // fires on every decrypted advertisement
+ *   var victron = new VictronBLE({ encryptionKey: 'a1b2c3...' }); // hex string from VictronConnect
+ *   await victron.addDevice();                 // opens device picker once
+ *   victron.onReading(function (data) { ... }); // fires on every decrypted advertisement
  */
 
 class VictronBLE {
-  constructor(opts = {}) {
+  constructor(opts) {
+    opts = opts || {};
     this.encryptionKey = opts.encryptionKey ? this._hexToBytes(opts.encryptionKey) : null;
     this.device = null;
     this._readingListeners = [];
+    this._debugListeners = [];
     this._cryptoKeyPromise = this.encryptionKey ? this._importKey(this.encryptionKey) : null;
   }
 
-  /** Opens the OS Bluetooth device picker and starts watching advertisements from the chosen device.
-   *  Victron devices don't reliably expose a filterable service UUID in the legacy advertisement
-   *  (it's all inside manufacturer data), so acceptAllDevices is the practical choice here --
-   *  the person picks their SmartSolar/SmartShunt by name from the list. */
+  /** Register a callback for low-level diagnostic messages: cb(msg). Fires at every stage of
+   *  handling an advertisement -- whether one arrived at all, whether it carried Victron
+   *  manufacturer data, key-check pass/fail, decrypt success/failure, parse result. Use this
+   *  on the test page to see what's happening on-screen, since console.warn isn't visible on
+   *  iOS/Bluefy without a remote debugger attached. */
+  onDebug(callback) {
+    this._debugListeners.push(callback);
+  }
+
+  _debug(msg) {
+    console.log('[VictronBLE]', msg);
+    this._debugListeners.forEach(function (cb) { cb(msg); });
+  }
+
+  /** Opens the OS Bluetooth device picker and starts watching advertisements from the chosen
+   *  device. Victron devices don't reliably expose a filterable service UUID in the legacy
+   *  advertisement (it's all inside manufacturer data), so acceptAllDevices is the practical
+   *  choice -- the person picks their SmartSolar/SmartShunt by name from the list. */
   async addDevice() {
     if (!navigator.bluetooth) {
       throw new Error(
@@ -54,6 +74,8 @@ class VictronBLE {
       throw new Error('navigator.bluetooth.requestDevice is not available in this browser.');
     }
 
+    var self = this;
+
     this.device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true });
 
     if (typeof this.device.watchAdvertisements !== 'function') {
@@ -63,7 +85,9 @@ class VictronBLE {
       );
     }
 
-    this.device.addEventListener('advertisementreceived', (event) => this._handleAdvertisement(event));
+    this.device.addEventListener('advertisementreceived', function (event) {
+      self._handleAdvertisement(event);
+    });
     await this.device.watchAdvertisements();
 
     return this.device.name || 'Victron device';
@@ -87,9 +111,9 @@ class VictronBLE {
   }
 
   _hexToBytes(hex) {
-    const clean = hex.replace(/[^0-9a-fA-F]/g, '');
-    const bytes = new Uint8Array(clean.length / 2);
-    for (let i = 0; i < bytes.length; i++) {
+    var clean = hex.replace(/[^0-9a-fA-F]/g, '');
+    var bytes = new Uint8Array(clean.length / 2);
+    for (var i = 0; i < bytes.length; i++) {
       bytes[i] = parseInt(clean.substr(i * 2, 2), 16);
     }
     return bytes;
@@ -100,16 +124,34 @@ class VictronBLE {
   }
 
   async _handleAdvertisement(event) {
+    var mfgKeys = [];
+    if (event.manufacturerData) {
+      event.manufacturerData.forEach(function (value, key) { mfgKeys.push(key); });
+    }
+    this._debug(
+      'Advertisement received from "' + (event.device ? event.device.name : '?') +
+      '" rssi=' + event.rssi + ' mfgDataKeys=[' + mfgKeys.join(',') + ']'
+    );
+
     if (!this.encryptionKey) {
-      console.warn('VictronBLE: no encryption key set yet -- ignoring advertisement. Call setEncryptionKey() first.');
+      this._debug('No encryption key set yet -- ignoring advertisement. Call setEncryptionKey() first.');
       return;
     }
 
     // Victron's manufacturer ID is 0x02E1 (737 decimal).
-    const mfgData = event.manufacturerData && event.manufacturerData.get(0x02e1);
-    if (!mfgData) return; // not a Victron advertisement, or doesn't carry mfg data this round
+    var mfgData = event.manufacturerData && event.manufacturerData.get(0x02e1);
+    if (!mfgData) {
+      this._debug('No manufacturer data for ID 0x02E1 in this advertisement -- not a Victron payload this round.');
+      return; // not a Victron advertisement, or doesn't carry mfg data this round
+    }
 
-    const bytes = new Uint8Array(mfgData.buffer || mfgData);
+    var bytes = new Uint8Array(mfgData.buffer || mfgData);
+    var rawHex = '';
+    for (var h = 0; h < bytes.length; h++) {
+      rawHex += bytes[h].toString(16).padStart(2, '0') + ' ';
+    }
+    this._debug('Victron mfg data (' + bytes.length + ' bytes): ' + rawHex);
+
     // Layout per Victron's published spec:
     //   [0:2]  Vendor ID (already matched via manufacturerData key, redundant here)
     //   [2]    Beacon/record type -- 0x10 for "Product Advertisement" (Instant Readout)
@@ -118,48 +160,67 @@ class VictronBLE {
     //   [5:7]  Nonce / data counter (little-endian uint16) -- used as the AES-CTR counter
     //   [7]    Key-check byte -- should match first byte of your encryption key
     //   [8:]   Encrypted payload
-    if (bytes.length < 9) return;
-
-    const recordType = bytes[2];
-    if (recordType !== 0x10) return; // not an Instant Readout record
-
-    const nonceLow = bytes[5];
-    const nonceHigh = bytes[6];
-    const keyCheck = bytes[7];
-
-    if (keyCheck !== this.encryptionKey[0]) {
-      console.warn(
-        `VictronBLE: key-check byte mismatch (got 0x${keyCheck.toString(16)}, expected 0x${this.encryptionKey[0].toString(16)}). ` +
-        'Your encryption key is probably wrong for this device.'
-      );
+    if (bytes.length < 9) {
+      this._debug('Mfg data too short (' + bytes.length + ' bytes, need at least 9) -- skipping.');
       return;
     }
 
-    const encrypted = bytes.slice(8);
+    var recordType = bytes[2];
+    if (recordType !== 0x10) {
+      this._debug('Record type 0x' + recordType.toString(16) + ' is not 0x10 (Instant Readout) -- skipping.');
+      return; // not an Instant Readout record
+    }
+
+    var nonceLow = bytes[5];
+    var nonceHigh = bytes[6];
+    var keyCheck = bytes[7];
+
+    if (keyCheck !== this.encryptionKey[0]) {
+      this._debug(
+        'KEY-CHECK MISMATCH: got 0x' + keyCheck.toString(16).padStart(2, '0') +
+        ', expected 0x' + this.encryptionKey[0].toString(16).padStart(2, '0') +
+        ' -- your encryption key is almost certainly wrong for this device. Re-copy it from ' +
+        'VictronConnect (Product Info > Instant Readout via Bluetooth > Show).'
+      );
+      return;
+    }
+    this._debug('Key-check byte matched (0x' + keyCheck.toString(16).padStart(2, '0') + ') -- decrypting...');
+
+    var encrypted = bytes.slice(8);
 
     try {
-      const decrypted = await this._decrypt(encrypted, nonceLow, nonceHigh);
-      const parsed = this._parsePayload(decrypted);
+      var decrypted = await this._decrypt(encrypted, nonceLow, nonceHigh);
+      var decHex = '';
+      for (var d = 0; d < decrypted.length; d++) {
+        decHex += decrypted[d].toString(16).padStart(2, '0') + ' ';
+      }
+      this._debug('Decrypted (' + decrypted.length + ' bytes): ' + decHex);
+
+      var parsed = this._parsePayload(decrypted);
       if (parsed) {
+        this._debug('Parsed OK as ' + parsed.deviceType);
         parsed.deviceName = this.device.name;
         parsed.rssi = event.rssi;
-        this._readingListeners.forEach((cb) => cb(parsed));
+        var listeners = this._readingListeners;
+        listeners.forEach(function (cb) { cb(parsed); });
+      } else {
+        this._debug('Decryption succeeded but parsing failed both layouts -- see raw decrypted bytes above.');
       }
     } catch (err) {
-      console.warn('VictronBLE: decryption/parse failed:', err);
+      this._debug('Decryption threw an error: ' + err.message);
     }
   }
 
   async _decrypt(encryptedBytes, nonceLow, nonceHigh) {
-    const key = await this._cryptoKeyPromise;
+    var key = await this._cryptoKeyPromise;
     // Victron's nonce is a 16-bit little-endian counter, zero-padded to a 16-byte CTR counter block.
-    const counter = new Uint8Array(16);
+    var counter = new Uint8Array(16);
     counter[0] = nonceLow;
     counter[1] = nonceHigh;
     // bytes [2..15] remain zero
 
-    const result = await crypto.subtle.decrypt(
-      { name: 'AES-CTR', counter, length: 128 },
+    var result = await crypto.subtle.decrypt(
+      { name: 'AES-CTR', counter: counter, length: 128 },
       key,
       encryptedBytes
     );
@@ -174,41 +235,37 @@ class VictronBLE {
    * for other device types (inverters, DC-DC converters, etc) using the same bit-reader pattern.
    *
    * NOTE: bit offsets below follow the community-verified layout from keshavdv/victron-ble.
-   * Treat as a strong first draft -- cross-check against your device's readings in
-   * VictronConnect the first time you run this.
+   * Treat as a strong first draft -- cross-check against VictronConnect's own readings the
+   * first time you run this against your real MPPT 100/30.
    */
   _parsePayload(data) {
-    // First decrypted byte is the device "state"/mode indicator shared across types in some
-    // firmware revisions; the actual field layout differs per device "model" (which isn't
-    // directly given -- we infer by trying the solar-charger layout, since that's the
-    // primary device for this project, and fall back to shunt layout if values look implausible).
-    const reader = new BitReader(data);
-
     // --- Try Solar Charger (MPPT) layout ---
     // device_state (u8), charger_error (u8), battery_voltage (u16, 0.01V), battery_current (u16, 0.1A),
     // yield_today (u16, 0.01kWh), pv_power (u16, 1W), load_current (u9, 0.1A)
     try {
-      const deviceState = reader.readUint(8);
-      const chargerError = reader.readUint(8);
-      const batteryVoltageRaw = reader.readInt(16);
-      const batteryCurrentRaw = reader.readInt(16);
-      const yieldTodayRaw = reader.readUint(16);
-      const pvPowerRaw = reader.readUint(16);
-      const loadCurrentRaw = reader.readUint(9);
+      var reader = new BitReader(data);
 
-      const batteryVoltage = batteryVoltageRaw / 100;
-      const batteryCurrent = batteryCurrentRaw / 10;
+      var deviceState = reader.readUint(8);
+      var chargerError = reader.readUint(8);
+      var batteryVoltageRaw = reader.readInt(16);
+      var batteryCurrentRaw = reader.readInt(16);
+      var yieldTodayRaw = reader.readUint(16);
+      var pvPowerRaw = reader.readUint(16);
+      var loadCurrentRaw = reader.readUint(9);
+
+      var batteryVoltage = batteryVoltageRaw / 100;
+      var batteryCurrent = batteryCurrentRaw / 10;
 
       // Sanity check: solar battery voltage for a 12V system should land roughly 8-16V.
       // If this looks wildly wrong, it's likely actually a different device type/layout.
       if (batteryVoltage > 5 && batteryVoltage < 100) {
         return {
           deviceType: 'solar_charger',
-          deviceState,
-          deviceStateName: VictronBLE.CHARGER_STATES[deviceState] || `Unknown (${deviceState})`,
-          chargerError,
-          batteryVoltage,
-          batteryCurrent,
+          deviceState: deviceState,
+          deviceStateName: VictronBLE.CHARGER_STATES[deviceState] || ('Unknown (' + deviceState + ')'),
+          chargerError: chargerError,
+          batteryVoltage: batteryVoltage,
+          batteryCurrent: batteryCurrent,
           yieldToday: yieldTodayRaw / 100, // kWh
           pvPower: pvPowerRaw, // W
           loadCurrent: loadCurrentRaw / 10, // A
@@ -222,77 +279,45 @@ class VictronBLE {
     // aux_mode (u2), voltage (u16, 0.01V), alarm (u16), aux value (u16), current (i22, 0.001A),
     // consumed_ah (u20, 0.1Ah), soc (u10, 0.1%)
     try {
-      const reader2 = new BitReader(data);
-      const auxMode = reader2.readUint(2);
+      var reader2 = new BitReader(data);
+      var auxMode = reader2.readUint(2);
       reader2.skip(14); // reserved bits in this byte-pair, per spec padding
-      const voltageRaw = reader2.readInt(16);
+      var voltageRaw = reader2.readInt(16);
       reader2.skip(16); // alarm reason, not decoded here
       reader2.skip(16); // aux value (temperature or starter voltage depending on auxMode), not decoded here
-      const currentRaw = reader2.readInt(22);
-      const consumedAhRaw = reader2.readUint(20);
-      const socRaw = reader2.readUint(10);
+      var currentRaw = reader2.readInt(22);
+      var consumedAhRaw = reader2.readUint(20);
+      var socRaw = reader2.readUint(10);
 
-      const voltage = voltageRaw / 100;
-      const current = currentRaw / 1000;
-      const soc = socRaw / 10;
+      var voltage = voltageRaw / 100;
+      var current = currentRaw / 1000;
+      var soc = socRaw / 10;
 
       if (voltage > 5 && voltage < 100 && soc >= 0 && soc <= 100) {
         return {
           deviceType: 'battery_monitor',
-          auxMode,
-          voltage,
-          current,
+          auxMode: auxMode,
+          voltage: voltage,
+          current: current,
           consumedAh: consumedAhRaw / 10,
-          soc,
+          soc: soc,
         };
       }
     } catch (e) {
       // both layouts failed
     }
 
-    console.warn('VictronBLE: could not confidently parse this advertisement as solar charger or battery monitor. Raw decrypted bytes:', [...data].map(b => b.toString(16).padStart(2, '0')).join(' '));
+    var hexDump = '';
+    for (var i = 0; i < data.length; i++) {
+      hexDump += data[i].toString(16).padStart(2, '0') + ' ';
+    }
+    console.warn('VictronBLE: could not confidently parse this advertisement as solar charger or battery monitor. Raw decrypted bytes:', hexDump);
     return null;
   }
 }
 
-/** Small helper for reading variable-width little-endian bit fields out of a byte array,
- *  matching how Victron (and the construct-based Python parser) packs multiple sub-byte
- *  fields back to back regardless of byte boundaries. */
-class BitReader {
-  constructor(bytes) {
-    this.bytes = bytes;
-    this.bitPos = 0;
-  }
-
-  skip(bits) {
-    this.bitPos += bits;
-  }
-
-  readUint(bits) {
-    let value = 0;
-    for (let i = 0; i < bits; i++) {
-      const byteIndex = (this.bitPos + i) >> 3;
-      const bitIndex = (this.bitPos + i) & 7;
-      if (byteIndex >= this.bytes.length) throw new Error('BitReader: out of data');
-      const bit = (this.bytes[byteIndex] >> bitIndex) & 1;
-      value |= bit << i;
-    }
-    this.bitPos += bits;
-    return value >>> 0;
-  }
-
-  readInt(bits) {
-    const raw = this.readUint(bits);
-    const signBit = 1 << (bits - 1);
-    if (raw & signBit) {
-      return raw - (1 << bits);
-    }
-    return raw;
-  }
-}
-
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { VictronBLE };
+  module.exports = { VictronBLE: VictronBLE };
 } else {
   window.VictronBLE = VictronBLE;
 }
@@ -317,3 +342,39 @@ VictronBLE.CHARGER_STATES = {
   248: 'BatterySafe',
   252: 'External control',
 };
+
+/** Small helper for reading variable-width little-endian bit fields out of a byte array,
+ *  matching how Victron (and the construct-based Python parser) packs multiple sub-byte
+ *  fields back to back regardless of byte boundaries. */
+class BitReader {
+  constructor(bytes) {
+    this.bytes = bytes;
+    this.bitPos = 0;
+  }
+
+  skip(bits) {
+    this.bitPos += bits;
+  }
+
+  readUint(bits) {
+    var value = 0;
+    for (var i = 0; i < bits; i++) {
+      var byteIndex = (this.bitPos + i) >> 3;
+      var bitIndex = (this.bitPos + i) & 7;
+      if (byteIndex >= this.bytes.length) throw new Error('BitReader: out of data');
+      var bit = (this.bytes[byteIndex] >> bitIndex) & 1;
+      value |= bit << i;
+    }
+    this.bitPos += bits;
+    return value >>> 0;
+  }
+
+  readInt(bits) {
+    var raw = this.readUint(bits);
+    var signBit = 1 << (bits - 1);
+    if (raw & signBit) {
+      return raw - (1 << bits);
+    }
+    return raw;
+  }
+}
