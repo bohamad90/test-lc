@@ -88,7 +88,7 @@
 
 <div class="log" id="log"></div>
 
-<script src="junctek-shunt-ble.js?v=3"></script>
+<script src="junctek-shunt-ble.js?v=4"></script>
 <script>
   function log(msg) {
     var logEl = document.getElementById('log');
@@ -124,6 +124,16 @@
 
   log('Script version loaded: ' + (window.__JUNCTEK_BLE_VERSION__ || 'UNKNOWN -- old cached file is still running!'));
 
+  shunt.onRawNotifyDebug(function(bytes) {
+    var hex = '';
+    var ascii = '';
+    for (var i = 0; i < bytes.length; i++) {
+      hex += bytes[i].toString(16).padStart(2, '0') + ' ';
+      ascii += (bytes[i] >= 32 && bytes[i] < 127) ? String.fromCharCode(bytes[i]) : '.';
+    }
+    log('RAW NOTIFY (' + bytes.length + ' bytes) hex: ' + hex + ' | ascii: ' + ascii);
+  });
+
   var logEl = document.getElementById('log');
   var statusBar = document.getElementById('statusBar');
   var connectBtn = document.getElementById('connectBtn');
@@ -141,6 +151,18 @@
       log('Connected to ' + name);
       log('Service UUID: ' + shunt.service.uuid);
       log('Notify char: ' + shunt.notifyChar.uuid + ', Write char: ' + shunt.writeChar.uuid);
+      var props = shunt.notifyChar.properties;
+      log('Characteristic properties: ' + JSON.stringify({
+        broadcast: props.broadcast,
+        read: props.read,
+        writeWithoutResponse: props.writeWithoutResponse,
+        write: props.write,
+        notify: props.notify,
+        indicate: props.indicate,
+        authenticatedSignedWrites: props.authenticatedSignedWrites,
+        reliableWrite: props.reliableWrite,
+        writableAuxiliaries: props.writableAuxiliaries
+      }));
     } catch (err) {
       var fullMsg = 'Connection failed: ' + err.message + '\nStack: ' + (err.stack || '(no stack)');
       log(fullMsg);
