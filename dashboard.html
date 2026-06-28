@@ -115,6 +115,7 @@
   .switch-cell .cname { font-size: 11.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .switch-cell .ch { font-size: 9px; color: var(--ink-faint); letter-spacing: 0.04em; }
   .switch-cell input.nameedit { width: 100%; font-size: 11.5px; font-weight: 600; background: #0a0a0c; border: 1px solid var(--amber-dim); border-radius: 6px; color: var(--ink); padding: 4px 6px; }
+  .switch-cell input.glyphedit { width: 46px; font-size: 18px; text-align: center; background: #0a0a0c; border: 1px solid var(--amber-dim); border-radius: 6px; color: var(--ink); padding: 3px; }
   .toggle-track { margin-top: auto; width: 38px; height: 22px; border-radius: 20px; background: var(--hairline); position: relative; align-self: flex-end; }
   .toggle-track.on { background: var(--amber); }
   .toggle-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.4); transition: transform 0.15s ease; }
@@ -131,6 +132,58 @@
   .conn-chip .txt b { display: block; color: var(--ink); font-size: 12px; font-weight: 600; margin-bottom: 1px; }
 
   .log { margin: 18px 16px 0; background: var(--panel); border-radius: 10px; padding: 12px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-faint); height: 120px; overflow-y: auto; white-space: pre-wrap; }
+
+  /* JuncTek charge/discharge state under the SOC gauge */
+  .gauge-center .gauge-state { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; margin-top: 6px; text-transform: uppercase; }
+  .gauge-center .gauge-state.charging { color: var(--good); }
+  .gauge-center .gauge-state.discharging { color: var(--amber); }
+  .gauge-center .gauge-state.idle { color: var(--ink-faint); }
+
+  /* ---------- iPad portrait: use the width, scale everything up ---------- */
+  @media (min-width: 700px) {
+    .screen { max-width: 720px; padding-bottom: 64px; }
+    .topbar { padding: 28px 30px 20px; }
+    .topbar .title { font-size: 25px; }
+    .topbar .clock { font-size: 17px; }
+    .conn-bar { padding: 20px 24px 6px; gap: 14px; }
+    .conn-btn { padding: 18px 10px; font-size: 15.5px; border-radius: 14px; }
+    .conn-btn .cdot { width: 10px; height: 10px; }
+    .conn-btn .sub { font-size: 11px; }
+    .keyrow { padding: 8px 24px 0; }
+    .keyrow input { padding: 12px 14px; font-size: 14px; }
+    .section-label { padding: 28px 28px 12px; font-size: 12px; }
+    .victron-panel, .shunt-panel, .switch-panel { margin: 0 24px; padding: 28px; border-radius: 22px; }
+    .fuel-panel { margin: 0 24px; padding: 28px; font-size: 14px; }
+    .victron-name { font-size: 16px; } .victron-sub { font-size: 12.5px; }
+    .victron-yield .num { font-size: 24px; }
+    .pv-flow .node .icon { font-size: 26px; }
+    .pv-flow .node .big { font-size: 27px; }
+    .pv-flow .node .small { font-size: 11px; }
+    .pv-flow .arrow .line { width: 56px; }
+    .victron-meta .m .v { font-size: 16px; } .victron-meta .m .k { font-size: 11px; }
+    .shunt-panel { gap: 28px; }
+    .gauge-wrap, .gauge-wrap svg { width: 176px; height: 176px; }
+    .gauge-center .pct { font-size: 40px; }
+    .gauge-center .lbl { font-size: 11px; }
+    .gauge-center .gauge-state { font-size: 12px; }
+    .shunt-stats { gap: 15px; }
+    .shunt-stat .k { font-size: 14px; } .shunt-stat .v { font-size: 18px; }
+    .shunt-eta { font-size: 12px; }
+    .switch-head .name { font-size: 16px; }
+    .switch-actions button { font-size: 12px; padding: 7px 13px; }
+    .switch-grid { grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .switch-cell { min-height: 122px; border-radius: 15px; padding: 14px 12px 13px; }
+    .switch-cell .glyph { font-size: 20px; }
+    .switch-cell input.glyphedit { font-size: 22px; width: 54px; }
+    .switch-cell .cname { font-size: 13px; }
+    .switch-cell .ch { font-size: 10px; }
+    .toggle-track { width: 44px; height: 26px; }
+    .toggle-thumb { width: 22px; height: 22px; }
+    .toggle-track.on .toggle-thumb { transform: translateX(18px); }
+    .conn-strip { margin: 32px 24px 0; gap: 12px; }
+    .conn-chip { padding: 13px 15px; }
+    .log { margin: 22px 24px 0; height: 150px; font-size: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -182,7 +235,7 @@
         <circle cx="66" cy="66" r="56" fill="none" stroke="#262C33" stroke-width="10" />
         <circle id="gaugeArc" cx="66" cy="66" r="56" fill="none" stroke="#4ADE9C" stroke-width="10" stroke-linecap="round" stroke-dasharray="351.86" stroke-dashoffset="351.86" />
       </svg>
-      <div class="gauge-center"><div class="pct"><span id="socText">--</span><span class="sign">%</span></div><div class="lbl">State of charge</div></div>
+      <div class="gauge-center"><div class="pct"><span id="socText">--</span><span class="sign">%</span></div><div class="lbl">State of charge</div><div class="gauge-state idle" id="socState">—</div></div>
     </div>
     <div class="shunt-stats">
       <div class="shunt-stat"><span class="k">Voltage</span><span class="v" id="jVolt">-- V</span></div>
@@ -200,7 +253,7 @@
     <div class="switch-head">
       <div><div class="name">12-Gang panel</div><div class="count" id="mCount">Not connected</div></div>
       <div class="switch-actions">
-        <button id="editNamesBtn">Edit names</button>
+        <button id="editNamesBtn">Edit</button>
         <button id="allOnBtn">All on</button>
         <button id="allOffBtn">All off</button>
       </div>
@@ -227,7 +280,7 @@
 <script src="junctek-shunt-ble.js?v=6"></script>
 <script src="mictuning-ble.js?v=2"></script>
 <script>
-  var DASHBOARD_VERSION = 1;
+  var DASHBOARD_VERSION = 3;
   var CHANNEL_COUNT = 12;
   var BATTERY_AH = 72;
   var DEFAULT_KEY = '6cc611245a854a60cde278f036c5c98a';
@@ -261,6 +314,12 @@
   }
   function saveNames(n) { try { localStorage.setItem('lc79_names', JSON.stringify(n)); } catch (e) {} }
   var names = loadNames();
+  function loadGlyphs() {
+    try { var s = JSON.parse(localStorage.getItem('lc79_glyphs')); if (s && s.length === CHANNEL_COUNT) return s; } catch (e) {}
+    return GLYPHS.slice();
+  }
+  function saveGlyphs(g) { try { localStorage.setItem('lc79_glyphs', JSON.stringify(g)); } catch (e) {} }
+  var glyphs = loadGlyphs();
   var channelState = new Array(CHANNEL_COUNT); for (var i = 0; i < CHANNEL_COUNT; i++) channelState[i] = false;
   var editMode = false;
 
@@ -317,6 +376,32 @@
   });
 
   // ================= BATTERY (JuncTek) =================
+  // Charge/discharge direction. A[2] is the device's direction flag, but its polarity isn't
+  // documented, so we self-calibrate from the remaining-Ah trend: when Ah clearly rises, the
+  // current flag value means "charging"; when it clearly falls, "discharging". One clear event
+  // teaches the whole (binary) mapping. Before that, assume a nonzero flag = charging.
+  var jDir = { chargeFlag: null, lastRemain: null, lastT: 0 };
+  function junctekDirection(r) {
+    var cur = r.current || 0;
+    var flag = (r.raw && r.raw.A && r.raw.A[2] != null) ? (r.raw.A[2] ? 1 : 0) : null;
+    var now = Date.now();
+    if (r.remainingAh != null && flag != null) {
+      if (jDir.lastRemain == null) { jDir.lastRemain = r.remainingAh; jDir.lastT = now; }
+      else if (now - jDir.lastT >= 3000) {
+        var delta = r.remainingAh - jDir.lastRemain;
+        if (delta > 0.005) jDir.chargeFlag = flag;            // Ah rising -> this flag = charging
+        else if (delta < -0.005) jDir.chargeFlag = (flag ? 0 : 1); // Ah falling -> other flag = charging
+        jDir.lastRemain = r.remainingAh; jDir.lastT = now;
+      }
+    }
+    if (cur < 0.05) return { state: 'idle', sign: '' };
+    var charging;
+    if (jDir.chargeFlag != null && flag != null) charging = (flag === jDir.chargeFlag);
+    else if (flag != null) charging = (flag === 1); // pre-calibration default
+    else charging = true;
+    return { state: charging ? 'charging' : 'discharging', sign: charging ? '+' : '-' };
+  }
+
   var shunt = null;
   document.getElementById('connBattery').addEventListener('click', async function () {
     try {
@@ -330,13 +415,16 @@
         batteryOn = true; setConnBtn('connBattery', 'connected'); setDot('dotBattery', true);
         setChip('chipBattery', 'chipBatteryTxt', true, 'live'); refreshLiveTag();
         if (r.voltage != null) document.getElementById('jVolt').textContent = r.voltage.toFixed(2) + ' V';
+        var dir = junctekDirection(r);
         if (r.current != null) {
-          var charging = r.current > 0.05;
           var cEl = document.getElementById('jCurrent');
-          cEl.textContent = (charging ? '+' : '') + r.current.toFixed(2) + ' A';
-          cEl.className = 'v ' + (charging ? 'charging' : 'discharging');
+          cEl.textContent = dir.sign + Math.abs(r.current).toFixed(2) + ' A';
+          cEl.className = 'v ' + dir.state;
         }
-        if (r.power != null) document.getElementById('jPower').textContent = Math.round(r.power) + ' W';
+        if (r.power != null) document.getElementById('jPower').textContent = dir.sign + Math.abs(Math.round(r.power)) + ' W';
+        var sEl = document.getElementById('socState');
+        sEl.textContent = dir.state === 'charging' ? '⚡ Charging' : (dir.state === 'discharging' ? '▼ Discharging' : '— Idle');
+        sEl.className = 'gauge-state ' + dir.state;
         if (r.remainingAh != null) document.getElementById('jRemain').textContent = r.remainingAh.toFixed(1) + ' Ah';
         if (r.fullCapacityAh) document.getElementById('jFull').textContent = r.fullCapacityAh + ' Ah';
         if (r.socPercent != null) setGauge(r.socPercent);
@@ -409,17 +497,25 @@
   document.getElementById('editNamesBtn').addEventListener('click', function () {
     var btn = this;
     if (!editMode) {
-      editMode = true; btn.textContent = 'Save names'; btn.className = 'editing'; renderGrid();
+      editMode = true; btn.textContent = 'Save'; btn.className = 'editing'; renderGrid();
     } else {
-      // read inputs
+      // read name inputs
       var inputs = document.querySelectorAll('#switchGrid input.nameedit');
       for (var i = 0; i < inputs.length; i++) {
         var idx = parseInt(inputs[i].getAttribute('data-idx'), 10);
         var val = inputs[i].value.trim();
         names[idx] = val || DEFAULT_NAMES[idx];
       }
-      saveNames(names); editMode = false; btn.textContent = 'Edit names'; btn.className = ''; renderGrid();
-      log('Channel names saved.');
+      // read icon (emoji) inputs
+      var gInputs = document.querySelectorAll('#switchGrid input.glyphedit');
+      for (var g = 0; g < gInputs.length; g++) {
+        var gidx = parseInt(gInputs[g].getAttribute('data-idx'), 10);
+        var gval = gInputs[g].value.trim();
+        glyphs[gidx] = gval || GLYPHS[gidx];
+      }
+      saveNames(names); saveGlyphs(glyphs);
+      editMode = false; btn.textContent = 'Edit'; btn.className = ''; renderGrid();
+      log('Channel names + icons saved.');
     }
   });
 
@@ -431,11 +527,14 @@
       var cell = document.createElement('div');
       var on = channelState[i];
       cell.className = 'switch-cell' + (on ? ' on' : '') + (editMode ? '' : (panel ? '' : ' disabled'));
+      var glyphHtml = editMode
+        ? '<input class="glyphedit" data-idx="' + i + '" value="' + escapeHtml(glyphs[i]) + '" maxlength="8" />'
+        : '<div class="glyph">' + escapeHtml(glyphs[i]) + '</div>';
       var nameHtml = editMode
         ? '<input class="nameedit" data-idx="' + i + '" value="' + escapeHtml(names[i]) + '" maxlength="16" />'
         : '<div class="cname">' + escapeHtml(names[i]) + '</div>';
       cell.innerHTML =
-        '<div class="glyph">' + GLYPHS[i] + '</div>' +
+        glyphHtml +
         nameHtml +
         '<div class="ch">CH ' + (i + 1) + '</div>' +
         '<div class="toggle-track' + (on ? ' on' : '') + '"><div class="toggle-thumb"></div></div>';
