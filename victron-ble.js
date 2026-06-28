@@ -215,6 +215,10 @@ class VictronBLE {
           var svcKeys = mfgDataKeys(event.serviceData);
           this._debug('ONE-TIME EVENT DUMP -- serviceData keys: [' + svcKeys.join(',') + ']');
         } catch (e4) {}
+
+        this._debug('Stopping after this first advertisement (debug capture mode) so the dump above stays visible.');
+        this.stopWatching();
+        return;
       }
 
       var mfgKeys = mfgDataKeys(event.manufacturerData);
@@ -411,9 +415,9 @@ if (typeof module !== 'undefined' && module.exports) {
   window.VictronBLE = VictronBLE;
 }
 
-console.log('>>> victron-ble.js VERSION 5 LOADED <<<');
+console.log('>>> victron-ble.js VERSION 6 LOADED <<<');
 if (typeof window !== 'undefined') {
-  window.__VICTRON_BLE_VERSION__ = 5;
+  window.__VICTRON_BLE_VERSION__ = 6;
 }
 
 // Victron's charger device-state enum, per the published Instant Readout spec / VE.Direct
