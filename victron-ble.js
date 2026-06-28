@@ -35,6 +35,48 @@
  *   victron.onReading(function (data) { ... }); // fires on every decrypted advertisement
  */
 
+/** Bluefy on iOS does not return event.manufacturerData as a real JS Map (no .forEach/.get),
+ *  unlike desktop Chrome which follows the spec's BluetoothManufacturerDataMap (a true Map).
+ *  These two helpers work with either shape so the same code runs on both. */
+function mfgDataKeys(manufacturerData) {
+  var keys = [];
+  if (!manufacturerData) return keys;
+  if (typeof manufacturerData.forEach === 'function') {
+    manufacturerData.forEach(function (value, key) { keys.push(key); });
+    return keys;
+  }
+  if (typeof manufacturerData.keys === 'function') {
+    try {
+      var it = manufacturerData.keys();
+      var item = it.next();
+      while (!item.done) {
+        keys.push(item.value);
+        item = it.next();
+      }
+      return keys;
+    } catch (e) {
+      // fall through to plain-object handling
+    }
+  }
+  // Plain object fallback (this is what Bluefy actually returns).
+  for (var k in manufacturerData) {
+    if (Object.prototype.hasOwnProperty.call(manufacturerData, k)) keys.push(k);
+  }
+  return keys;
+}
+
+function mfgDataGet(manufacturerData, id) {
+  if (!manufacturerData) return null;
+  if (typeof manufacturerData.get === 'function') {
+    var viaGet = manufacturerData.get(id);
+    if (viaGet !== undefined) return viaGet;
+  }
+  // Plain object fallback -- try both numeric and string key forms.
+  if (manufacturerData[id] !== undefined) return manufacturerData[id];
+  if (manufacturerData[String(id)] !== undefined) return manufacturerData[String(id)];
+  return null;
+}
+
 class VictronBLE {
   constructor(opts) {
     opts = opts || {};
@@ -124,71 +166,68 @@ class VictronBLE {
   }
 
   async _handleAdvertisement(event) {
-    var mfgKeys = [];
-    if (event.manufacturerData) {
-      event.manufacturerData.forEach(function (value, key) { mfgKeys.push(key); });
-    }
-    this._debug(
-      'Advertisement received from "' + (event.device ? event.device.name : '?') +
-      '" rssi=' + event.rssi + ' mfgDataKeys=[' + mfgKeys.join(',') + ']'
-    );
-
-    if (!this.encryptionKey) {
-      this._debug('No encryption key set yet -- ignoring advertisement. Call setEncryptionKey() first.');
-      return;
-    }
-
-    // Victron's manufacturer ID is 0x02E1 (737 decimal).
-    var mfgData = event.manufacturerData && event.manufacturerData.get(0x02e1);
-    if (!mfgData) {
-      this._debug('No manufacturer data for ID 0x02E1 in this advertisement -- not a Victron payload this round.');
-      return; // not a Victron advertisement, or doesn't carry mfg data this round
-    }
-
-    var bytes = new Uint8Array(mfgData.buffer || mfgData);
-    var rawHex = '';
-    for (var h = 0; h < bytes.length; h++) {
-      rawHex += bytes[h].toString(16).padStart(2, '0') + ' ';
-    }
-    this._debug('Victron mfg data (' + bytes.length + ' bytes): ' + rawHex);
-
-    // Layout per Victron's published spec:
-    //   [0:2]  Vendor ID (already matched via manufacturerData key, redundant here)
-    //   [2]    Beacon/record type -- 0x10 for "Product Advertisement" (Instant Readout)
-    //   [3]    Unknown/version-ish byte
-    //   [4]    Device/model state byte (varies per device type)
-    //   [5:7]  Nonce / data counter (little-endian uint16) -- used as the AES-CTR counter
-    //   [7]    Key-check byte -- should match first byte of your encryption key
-    //   [8:]   Encrypted payload
-    if (bytes.length < 9) {
-      this._debug('Mfg data too short (' + bytes.length + ' bytes, need at least 9) -- skipping.');
-      return;
-    }
-
-    var recordType = bytes[2];
-    if (recordType !== 0x10) {
-      this._debug('Record type 0x' + recordType.toString(16) + ' is not 0x10 (Instant Readout) -- skipping.');
-      return; // not an Instant Readout record
-    }
-
-    var nonceLow = bytes[5];
-    var nonceHigh = bytes[6];
-    var keyCheck = bytes[7];
-
-    if (keyCheck !== this.encryptionKey[0]) {
-      this._debug(
-        'KEY-CHECK MISMATCH: got 0x' + keyCheck.toString(16).padStart(2, '0') +
-        ', expected 0x' + this.encryptionKey[0].toString(16).padStart(2, '0') +
-        ' -- your encryption key is almost certainly wrong for this device. Re-copy it from ' +
-        'VictronConnect (Product Info > Instant Readout via Bluetooth > Show).'
-      );
-      return;
-    }
-    this._debug('Key-check byte matched (0x' + keyCheck.toString(16).padStart(2, '0') + ') -- decrypting...');
-
-    var encrypted = bytes.slice(8);
-
     try {
+      var mfgKeys = mfgDataKeys(event.manufacturerData);
+      this._debug(
+        'Advertisement received from "' + (event.device ? event.device.name : '?') +
+        '" rssi=' + event.rssi + ' mfgDataKeys=[' + mfgKeys.join(',') + ']'
+      );
+
+      if (!this.encryptionKey) {
+        this._debug('No encryption key set yet -- ignoring advertisement. Call setEncryptionKey() first.');
+        return;
+      }
+
+      // Victron's manufacturer ID is 0x02E1 (737 decimal).
+      var mfgData = mfgDataGet(event.manufacturerData, 0x02e1);
+      if (!mfgData) {
+        this._debug('No manufacturer data for ID 0x02E1 (737) in this advertisement -- not a Victron payload this round.');
+        return; // not a Victron advertisement, or doesn't carry mfg data this round
+      }
+
+      var bytes = new Uint8Array(mfgData.buffer || mfgData);
+      var rawHex = '';
+      for (var h = 0; h < bytes.length; h++) {
+        rawHex += bytes[h].toString(16).padStart(2, '0') + ' ';
+      }
+      this._debug('Victron mfg data (' + bytes.length + ' bytes): ' + rawHex);
+
+      // Layout per Victron's published spec:
+      //   [0:2]  Vendor ID (already matched via manufacturerData key, redundant here)
+      //   [2]    Beacon/record type -- 0x10 for "Product Advertisement" (Instant Readout)
+      //   [3]    Unknown/version-ish byte
+      //   [4]    Device/model state byte (varies per device type)
+      //   [5:7]  Nonce / data counter (little-endian uint16) -- used as the AES-CTR counter
+      //   [7]    Key-check byte -- should match first byte of your encryption key
+      //   [8:]   Encrypted payload
+      if (bytes.length < 9) {
+        this._debug('Mfg data too short (' + bytes.length + ' bytes, need at least 9) -- skipping.');
+        return;
+      }
+
+      var recordType = bytes[2];
+      if (recordType !== 0x10) {
+        this._debug('Record type 0x' + recordType.toString(16) + ' is not 0x10 (Instant Readout) -- skipping.');
+        return; // not an Instant Readout record
+      }
+
+      var nonceLow = bytes[5];
+      var nonceHigh = bytes[6];
+      var keyCheck = bytes[7];
+
+      if (keyCheck !== this.encryptionKey[0]) {
+        this._debug(
+          'KEY-CHECK MISMATCH: got 0x' + keyCheck.toString(16).padStart(2, '0') +
+          ', expected 0x' + this.encryptionKey[0].toString(16).padStart(2, '0') +
+          ' -- your encryption key is almost certainly wrong for this device. Re-copy it from ' +
+          'VictronConnect (Product Info > Instant Readout via Bluetooth > Show).'
+        );
+        return;
+      }
+      this._debug('Key-check byte matched (0x' + keyCheck.toString(16).padStart(2, '0') + ') -- decrypting...');
+
+      var encrypted = bytes.slice(8);
+
       var decrypted = await this._decrypt(encrypted, nonceLow, nonceHigh);
       var decHex = '';
       for (var d = 0; d < decrypted.length; d++) {
@@ -207,7 +246,7 @@ class VictronBLE {
         this._debug('Decryption succeeded but parsing failed both layouts -- see raw decrypted bytes above.');
       }
     } catch (err) {
-      this._debug('Decryption threw an error: ' + err.message);
+      this._debug('_handleAdvertisement error: ' + err.message);
     }
   }
 
@@ -322,9 +361,9 @@ if (typeof module !== 'undefined' && module.exports) {
   window.VictronBLE = VictronBLE;
 }
 
-console.log('>>> victron-ble.js VERSION 2 LOADED <<<');
+console.log('>>> victron-ble.js VERSION 3 LOADED <<<');
 if (typeof window !== 'undefined') {
-  window.__VICTRON_BLE_VERSION__ = 2;
+  window.__VICTRON_BLE_VERSION__ = 3;
 }
 
 // Victron's charger device-state enum, per the published Instant Readout spec / VE.Direct
