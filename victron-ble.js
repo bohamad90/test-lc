@@ -322,6 +322,11 @@ if (typeof module !== 'undefined' && module.exports) {
   window.VictronBLE = VictronBLE;
 }
 
+console.log('>>> victron-ble.js VERSION 2 LOADED <<<');
+if (typeof window !== 'undefined') {
+  window.__VICTRON_BLE_VERSION__ = 2;
+}
+
 // Victron's charger device-state enum, per the published Instant Readout spec / VE.Direct
 // protocol docs. Attached as a static property so it's easy to reference from a dashboard
 // (e.g. VictronBLE.CHARGER_STATES[7]).
