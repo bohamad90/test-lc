@@ -24,9 +24,9 @@
 
 const DEFAULT_PASSWORD = '11223344';
 
-console.log('>>> junctek-shunt-ble.js VERSION 4 LOADED <<<');
+console.log('>>> junctek-shunt-ble.js VERSION 5 LOADED <<<');
 if (typeof window !== 'undefined') {
-  window.__JUNCTEK_BLE_VERSION__ = 4;
+  window.__JUNCTEK_BLE_VERSION__ = 5;
 }
 
 class JuncTekShunt {
@@ -254,21 +254,22 @@ class JuncTekShunt {
     // Frame body is everything after the letter, optionally after an '=' sign, comma-separated.
     const eqIdx = frame.indexOf('=');
     const body = eqIdx > -1 ? frame.slice(eqIdx + 1) : frame.slice(2);
-    const parts = body.split(',');
+    let parts = body.split(',');
 
-    if (parts.length < 2) return; // need at least one value + checksum
-
-    const values = parts.slice(0, -1);
-    const claimedChecksum = Number(parts[parts.length - 1]);
-    const expectedChecksum = this._checksum(letter, values);
-
-    if (claimedChecksum !== expectedChecksum) {
-      console.warn(`Checksum mismatch on frame ${frame} (letter ${letter}). Got ${claimedChecksum}, expected ${expectedChecksum}. Ignoring.`);
-      return;
+    // CONFIRMED via live capture: notify frames from the device end with a trailing comma
+    // (e.g. ":A=1442,190,0,...,7993,") and carry NO checksum field at all -- unlike outgoing
+    // commands sent TO the device, which do need a checksum (see sendCommand/_checksum).
+    // Splitting on ',' leaves a trailing empty string from that final comma; strip it.
+    if (parts.length && parts[parts.length - 1] === '') {
+      parts = parts.slice(0, -1);
     }
 
-    this.lastFrames[letter] = values.map((v) => Number(v));
-    this._rawFrameListeners.forEach((cb) => cb({ letter, values: this.lastFrames[letter], raw: frame }));
+    if (!parts.length) return;
+
+    const values = parts.map((v) => Number(v));
+
+    this.lastFrames[letter] = values;
+    this._rawFrameListeners.forEach((cb) => cb({ letter, values, raw: frame }));
 
     if (letter === 'A') {
       this._emitReading();
