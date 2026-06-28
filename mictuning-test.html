@@ -119,7 +119,7 @@
 
   allOnBtn.addEventListener('click', async function() {
     log('Sending All On...');
-    await panel.setAll(true, CHANNEL_COUNT);
+    await panel.setAll(true);
     channelState.fill(true);
     document.querySelectorAll('.channel').forEach(function(el) { el.classList.add('on'); });
     log('All On sent.');
@@ -127,7 +127,7 @@
 
   allOffBtn.addEventListener('click', async function() {
     log('Sending All Off...');
-    await panel.setAll(false, CHANNEL_COUNT);
+    await panel.setAll(false);
     channelState.fill(false);
     document.querySelectorAll('.channel').forEach(function(el) { el.classList.remove('on'); });
     log('All Off sent.');
