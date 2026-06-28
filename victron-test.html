@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Victron Instant Readout Test</title>
+<title>Victron Instant Readout Test (v7)</title>
 <style>
-  :root { --bg: #111; --card: #1b1b1f; --accent: #3b82f6; }
+  :root { --bg: #111; --card: #1b1b1f; --accent: #3b82f6; --warn: #f59e0b; --good: #22c55e; }
   * { box-sizing: border-box; }
   body {
     background: var(--bg); color: #f4f4f5; font-family: -apple-system, system-ui, sans-serif;
@@ -27,35 +27,64 @@
     background: var(--accent); color: white; cursor: pointer; font-weight: 600; width: 100%;
   }
   button:disabled { background: #374151; color: #6b7280; }
+  button.small { width: auto; font-size: 13px; padding: 8px 14px; }
   .status-bar { font-size: 13px; color: #9ca3af; margin: 12px 0; }
-  .readings { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
+  .counters {
+    font-family: monospace; font-size: 13px; color: #d1d5db; background: var(--card);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+  }
+  /* The dump panel -- this is the whole point of v7. Fixed, scrollable, copyable, never buried. */
+  .dump-wrap { margin-bottom: 20px; }
+  .dump-head {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+  }
+  .dump-head .title { font-size: 14px; font-weight: 700; color: var(--warn); }
+  .dump {
+    background: #0a0a0c; border: 1px solid var(--warn); border-radius: 10px; padding: 14px;
+    font-family: monospace; font-size: 12px; color: #e5e7eb; line-height: 1.5;
+    max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  }
+  .dump.empty { color: #6b7280; border-color: #374151; }
+  .readings { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 20px 0; }
   .reading-card { background: var(--card); border-radius: 14px; padding: 16px; }
   .reading-card .label { font-size: 13px; color: #9ca3af; margin-bottom: 6px; }
   .reading-card .value { font-size: 26px; font-weight: 700; }
   .reading-card .unit { font-size: 14px; color: #9ca3af; margin-left: 4px; }
   .log {
     background: var(--card); border-radius: 10px; padding: 14px; font-family: monospace;
-    font-size: 12px; color: #a1a1aa; height: 220px; overflow-y: auto; white-space: pre-wrap;
+    font-size: 12px; color: #a1a1aa; height: 180px; overflow-y: auto; white-space: pre-wrap;
   }
 </style>
 </head>
 <body>
 
-<h1>Victron Instant Readout Test</h1>
-<div class="sub">Standalone test page. Open this in Bluefy on iPad/iPhone (Bluefy's watchAdvertisements support is required), or Chrome on desktop/Android.</div>
+<h1>Victron Instant Readout Test <span style="color:var(--warn);">v7</span></h1>
+<div class="sub">Diagnostic build. Open in Bluefy on iPad/iPhone. The first advertisement is captured into the yellow panel below so it can't scroll away.</div>
 
 <div class="note">
   This does <b>not</b> connect to your Victron device - it passively listens to the encrypted
-  status broadcasts it's already sending. You need the device's <b>encryption key</b> first:
-  open VictronConnect, select your device, tap the gear icon, Product Info, Instant Readout via
-  Bluetooth, make sure it's enabled, then tap Show under Instant Readout Details.
+  status broadcasts it already sends. Get the <b>encryption key</b> from VictronConnect:
+  device gear icon &rarr; Product Info &rarr; Instant Readout via Bluetooth (enable it) &rarr; Show.
+  <br /><br />
+  <b>Important:</b> make sure Bluefy is updated to the latest App Store version first - older
+  Bluefy builds did not forward advertisement manufacturer data at all.
 </div>
 
 <label for="keyInput">Encryption key (hex, from VictronConnect)</label>
-<input id="keyInput" type="text" placeholder="e.g. a1b2c3d4e5f6..." />
+<input id="keyInput" type="text" value="6cc611245a854a60cde278f036c5c98a" placeholder="e.g. a1b2c3d4e5f6..." />
 
 <button id="addBtn">Add Victron Device</button>
 <div class="status-bar" id="statusBar">Not connected.</div>
+
+<div class="counters" id="counters">Ads seen: 0 &middot; Victron ads (with 0x02E1 data): 0 &middot; last RSSI: --</div>
+
+<div class="dump-wrap">
+  <div class="dump-head">
+    <div class="title">First-advertisement event dump</div>
+    <button class="small" id="copyDumpBtn" disabled>Copy dump</button>
+  </div>
+  <div class="dump empty" id="dump">Waiting for the first advertisement... the full event structure will appear here.</div>
+</div>
 
 <div class="readings" id="readingsGrid">
   <div class="reading-card">
@@ -78,7 +107,7 @@
 
 <div class="log" id="log"></div>
 
-<script src="victron-ble.js?v=6"></script>
+<script src="victron-ble.js?v=7"></script>
 <script>
   var victron = null;
 
@@ -86,12 +115,14 @@
   var statusBar = document.getElementById('statusBar');
   var addBtn = document.getElementById('addBtn');
   var keyInput = document.getElementById('keyInput');
+  var countersEl = document.getElementById('counters');
+  var dumpEl = document.getElementById('dump');
+  var copyDumpBtn = document.getElementById('copyDumpBtn');
+  var dumpText = '';
 
   window.addEventListener('error', function (event) {
-    var msg = '[GLOBAL ERROR] ' + event.message + ' at ' + event.filename + ':' + event.lineno;
-    try { log(msg); } catch (e) {}
+    try { log('[GLOBAL ERROR] ' + event.message + ' at ' + event.filename + ':' + event.lineno); } catch (e) {}
   });
-
   window.addEventListener('unhandledrejection', function (event) {
     var reasonMsg = (event.reason && event.reason.message) ? event.reason.message : event.reason;
     try { log('[UNHANDLED PROMISE REJECTION] ' + reasonMsg); } catch (e) {}
@@ -105,20 +136,51 @@
 
   log('Script version loaded: ' + (window.__VICTRON_BLE_VERSION__ || 'UNKNOWN -- old cached file is still running!'));
 
+  copyDumpBtn.addEventListener('click', function () {
+    if (!dumpText) return;
+    function done() { copyDumpBtn.textContent = 'Copied!'; setTimeout(function () { copyDumpBtn.textContent = 'Copy dump'; }, 1500); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(dumpText).then(done, function () {
+        // Fallback: select the dump text so the user can long-press > Copy.
+        var range = document.createRange();
+        range.selectNodeContents(dumpEl);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      });
+    } else {
+      var range = document.createRange();
+      range.selectNodeContents(dumpEl);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  });
+
   addBtn.addEventListener('click', async function () {
     var key = keyInput.value.trim();
-    if (!key) {
-      log('Enter the encryption key first.');
-      return;
-    }
+    if (!key) { log('Enter the encryption key first.'); return; }
 
     try {
       addBtn.disabled = true;
       addBtn.textContent = 'Opening picker...';
       victron = new VictronBLE({ encryptionKey: key });
 
-      victron.onDebug(function (msg) {
-        log('[debug] ' + msg);
+      victron.onDebug(function (msg) { log('[debug] ' + msg); });
+
+      victron.onDump(function (text) {
+        dumpText = text;
+        dumpEl.textContent = text;
+        dumpEl.classList.remove('empty');
+        copyDumpBtn.disabled = false;
+        log('First-advertisement dump captured (see yellow panel above). Tap "Copy dump" and send it over.');
+      });
+
+      victron.onStatus(function (s) {
+        countersEl.textContent =
+          'Ads seen: ' + s.adsSeen +
+          ' · Victron ads (with 0x02E1 data): ' + s.victronAdsSeen +
+          ' · last RSSI: ' + s.lastRssi;
       });
 
       victron.onReading(function (data) {
@@ -138,7 +200,7 @@
       var name = await victron.addDevice();
       statusBar.textContent = 'Listening: ' + name;
       addBtn.textContent = 'Listening: ' + name;
-      log('Added device: ' + name + '. Waiting for advertisements (should arrive every ~1s)...');
+      log('Added device: ' + name + '. Waiting for advertisements (~1/sec)...');
     } catch (err) {
       log('Failed: ' + err.message);
       statusBar.textContent = 'Failed - see log.';
