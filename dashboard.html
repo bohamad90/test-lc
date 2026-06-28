@@ -184,6 +184,17 @@
     .conn-chip { padding: 13px 15px; }
     .log { margin: 22px 24px 0; height: 150px; font-size: 12px; }
   }
+
+  /* ---------- v4 additions ---------- */
+  .alert-banner { display: none; margin: 12px 16px 0; background: rgba(229,72,77,0.12); border: 1px solid var(--alarm); color: #ffd9da; border-radius: 12px; padding: 11px 14px; font-size: 12.5px; font-weight: 600; }
+  .connall-row { padding: 8px 16px 0; }
+  .connall-btn { width: 100%; background: var(--panel-raised); color: var(--ink); border: 1px solid var(--hairline); border-radius: 12px; padding: 11px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .cap-input { width: 56px; background: #0a0a0c; border: 1px solid var(--hairline); border-radius: 6px; color: var(--ink); font-family: ui-monospace, monospace; font-size: 11px; padding: 3px 5px; text-align: right; }
+  .cap-save { background: var(--panel-raised); color: var(--ink-dim); border: 1px solid var(--hairline); border-radius: 6px; font-size: 10px; padding: 3px 8px; cursor: pointer; }
+  #masterBtn.on { background: var(--good); color: #000; border-color: var(--good); }
+  .raw-inspector { margin: 10px 16px 0; background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; padding: 10px 14px; font-size: 11.5px; color: var(--ink-dim); }
+  .raw-inspector summary { cursor: pointer; color: var(--ink-dim); font-weight: 600; }
+  .rawdump { margin-top: 8px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-faint); white-space: pre-wrap; max-height: 200px; overflow: auto; }
 </style>
 </head>
 <body>
@@ -193,6 +204,8 @@
     <div class="title">LC79 Power<span class="dim" id="liveTag"> · Standby</span></div>
     <div class="clock" id="clock">--:--</div>
   </div>
+
+  <div class="alert-banner" id="alertBanner"></div>
 
   <!-- CONNECT -->
   <div class="conn-bar">
@@ -204,6 +217,7 @@
     <div class="lbl">Victron encryption key</div>
     <input id="solarKey" type="text" placeholder="hex key from VictronConnect" />
   </div>
+  <div class="connall-row"><button id="connectAll" class="connall-btn">Connect all</button></div>
 
   <!-- VICTRON -->
   <div class="section-label"><span class="dot" id="dotSolar"></span> Solar · Victron SmartSolar <span class="src">BLE advertised</span></div>
@@ -243,9 +257,13 @@
       <div class="shunt-stat"><span class="k">Power</span><span class="v" id="jPower">-- W</span></div>
       <div class="shunt-divider"></div>
       <div class="shunt-stat"><span class="k">Remaining</span><span class="v" id="jRemain">-- Ah</span></div>
-      <div class="shunt-eta">Full capacity <b id="jFull">72 Ah</b></div>
+      <div class="shunt-stat"><span class="k">Runtime</span><span class="v" id="jRuntime">—</span></div>
+      <div class="shunt-stat"><span class="k">Est. load</span><span class="v" id="jLoad">—</span></div>
+      <div class="shunt-eta">Capacity <input id="capInput" class="cap-input" type="number" min="1" max="2000" /> Ah <button id="capSave" class="cap-save">set</button></div>
     </div>
   </div>
+
+  <details class="raw-inspector"><summary>Raw shunt data — for mapping temperature / totals</summary><div class="rawdump" id="rawDump">Connect the battery to see live A-register values with their indices. Read these against the shunt's own screen so we can identify which index is temperature and which are cumulative totals.</div></details>
 
   <!-- MICTUNING -->
   <div class="section-label"><span class="dot" id="dotSwitches"></span> Switches · MICTUNING P1S <span class="src">BLE write</span></div>
@@ -254,6 +272,7 @@
       <div><div class="name">12-Gang panel</div><div class="count" id="mCount">Not connected</div></div>
       <div class="switch-actions">
         <button id="editNamesBtn">Edit</button>
+        <button id="masterBtn">LED</button>
         <button id="allOnBtn">All on</button>
         <button id="allOffBtn">All off</button>
       </div>
@@ -280,13 +299,15 @@
 <script src="junctek-shunt-ble.js?v=6"></script>
 <script src="mictuning-ble.js?v=2"></script>
 <script>
-  var DASHBOARD_VERSION = 3;
+  var DASHBOARD_VERSION = 4;
   var CHANNEL_COUNT = 12;
   var BATTERY_AH = 72;
   var DEFAULT_KEY = '6cc611245a854a60cde278f036c5c98a';
   var DEFAULT_NAMES = ['Interior','Awning','Fan','Water pump','Fridge','Inverter','Antenna','Slide-out','Heater','Rock lights','Air horn','Aux'];
   var GLYPHS = ['💡','🔆','🌀','🚰','❄️','🔌','📡','🛗','🔥','💡','🎺','＋'];
   var GAUGE_C = 351.86;
+  var LOW_SOC = 20;       // % — low-battery alert threshold
+  var LOW_VOLT = 11.5;    // V — conservative low-voltage alert (tell me your battery chemistry to tune)
 
   var logEl = document.getElementById('log');
   function log(msg) {
@@ -320,6 +341,11 @@
   }
   function saveGlyphs(g) { try { localStorage.setItem('lc79_glyphs', JSON.stringify(g)); } catch (e) {} }
   var glyphs = loadGlyphs();
+  function loadCapacity() { var v = parseFloat(localStorage.getItem('lc79_capacity')); return (v && v > 0) ? v : BATTERY_AH; }
+  function saveCapacity(v) { try { localStorage.setItem('lc79_capacity', String(v)); } catch (e) {} }
+  var capacity = loadCapacity();
+  var lastV = null, lastJ = null, currentSoc = null;
+  var srcWas = { battery: false, switches: false };
   var channelState = new Array(CHANNEL_COUNT); for (var i = 0; i < CHANNEL_COUNT; i++) channelState[i] = false;
   var editMode = false;
 
@@ -345,7 +371,8 @@
 
   // ================= SOLAR (Victron) =================
   var victron = null;
-  document.getElementById('connSolar').addEventListener('click', async function () {
+  document.getElementById('connSolar').addEventListener('click', connectSolar);
+  async function connectSolar() {
     var key = keyInput.value.trim();
     if (!key) { log('Enter the Victron encryption key first.'); return; }
     localStorage.setItem('lc79_victron_key', key);
@@ -367,13 +394,14 @@
         var pill = document.getElementById('vStatePill'), dash = document.getElementById('vStateDash');
         pill.style.display = 'inline-flex'; dash.style.display = 'none';
         document.getElementById('vState').textContent = d.deviceStateName || '--';
+        lastV = d; updateNetFlow(); evalAlerts();
       });
       var name = await victron.addDevice();
       log('Solar listening: ' + name);
     } catch (err) {
       log('Solar connect failed: ' + err.message); setConnBtn('connSolar', '');
     }
-  });
+  }
 
   // ================= BATTERY (JuncTek) =================
   // Charge/discharge direction. A[2] is the device's direction flag, but its polarity isn't
@@ -403,38 +431,32 @@
   }
 
   var shunt = null;
-  document.getElementById('connBattery').addEventListener('click', async function () {
+  document.getElementById('connBattery').addEventListener('click', connectBattery);
+  async function connectBattery() {
     try {
       setConnBtn('connBattery', 'connecting');
-      shunt = new JuncTekShunt({ batteryCapacityAh: BATTERY_AH });
+      shunt = new JuncTekShunt({ batteryCapacityAh: capacity });
       shunt.onConnectionChange(function (s) {
-        if (!s.connected) { batteryOn = false; setDot('dotBattery', false); setChip('chipBattery','chipBatteryTxt', false, 'reconnecting'); refreshLiveTag(); }
+        if (!s.connected) { batteryOn = false; setDot('dotBattery', false); setChip('chipBattery','chipBatteryTxt', false, 'reconnecting'); refreshLiveTag(); evalAlerts(); }
       });
       shunt.onReading(function (r) {
         if (!r.connected) return;
-        batteryOn = true; setConnBtn('connBattery', 'connected'); setDot('dotBattery', true);
+        batteryOn = true; srcWas.battery = true; setConnBtn('connBattery', 'connected'); setDot('dotBattery', true);
         setChip('chipBattery', 'chipBatteryTxt', true, 'live'); refreshLiveTag();
-        if (r.voltage != null) document.getElementById('jVolt').textContent = r.voltage.toFixed(2) + ' V';
-        var dir = junctekDirection(r);
-        if (r.current != null) {
-          var cEl = document.getElementById('jCurrent');
-          cEl.textContent = dir.sign + Math.abs(r.current).toFixed(2) + ' A';
-          cEl.className = 'v ' + dir.state;
-        }
-        if (r.power != null) document.getElementById('jPower').textContent = dir.sign + Math.abs(Math.round(r.power)) + ' W';
-        var sEl = document.getElementById('socState');
-        sEl.textContent = dir.state === 'charging' ? '⚡ Charging' : (dir.state === 'discharging' ? '▼ Discharging' : '— Idle');
-        sEl.className = 'gauge-state ' + dir.state;
-        if (r.remainingAh != null) document.getElementById('jRemain').textContent = r.remainingAh.toFixed(1) + ' Ah';
-        if (r.fullCapacityAh) document.getElementById('jFull').textContent = r.fullCapacityAh + ' Ah';
-        if (r.socPercent != null) setGauge(r.socPercent);
+        renderBattery(r);
+      });
+      shunt.onRawFrame(function (f) {
+        if (f.letter !== 'A' || !f.values) return;
+        var html = '';
+        for (var i = 0; i < f.values.length; i++) html += 'A[' + i + '] = ' + f.values[i] + '\n';
+        document.getElementById('rawDump').textContent = html;
       });
       var name = await shunt.connect();
       log('Battery connected: ' + name);
     } catch (err) {
       log('Battery connect failed: ' + err.message); setConnBtn('connBattery', '');
     }
-  });
+  }
 
   function setGauge(soc) {
     soc = Math.max(0, Math.min(100, soc));
@@ -445,27 +467,129 @@
     arc.setAttribute('stroke', color);
   }
 
+  function renderBattery(r) {
+    lastJ = r;
+    var dir = junctekDirection(r);
+    if (r.voltage != null) document.getElementById('jVolt').textContent = r.voltage.toFixed(2) + ' V';
+    if (r.current != null) {
+      var cEl = document.getElementById('jCurrent');
+      cEl.textContent = dir.sign + Math.abs(r.current).toFixed(2) + ' A';
+      cEl.className = 'v ' + dir.state;
+    }
+    if (r.power != null) document.getElementById('jPower').textContent = dir.sign + Math.abs(Math.round(r.power)) + ' W';
+    var sEl = document.getElementById('socState');
+    sEl.textContent = dir.state === 'charging' ? '⚡ Charging' : (dir.state === 'discharging' ? '▼ Discharging' : '— Idle');
+    sEl.className = 'gauge-state ' + dir.state;
+    if (r.remainingAh != null) document.getElementById('jRemain').textContent = r.remainingAh.toFixed(1) + ' Ah';
+    var soc = (capacity > 0 && r.remainingAh != null) ? Math.min(100, Math.floor(r.remainingAh / capacity * 100)) : (r.socPercent != null ? r.socPercent : null);
+    currentSoc = soc;
+    if (soc != null) setGauge(soc);
+    document.getElementById('jRuntime').textContent = fmtRuntime(r, dir);
+    updateNetFlow();
+    evalAlerts();
+  }
+
+  function fmtRuntime(r, dir) {
+    if (r.remainingAh == null || r.current == null) return '—';
+    var cur = Math.abs(r.current);
+    if (cur < 0.05) return '—';
+    var h, label;
+    if (dir.state === 'discharging') { h = r.remainingAh / cur; label = ' to empty'; }
+    else if (dir.state === 'charging') { var togo = capacity - r.remainingAh; if (togo <= 0) return 'Full'; h = togo / cur; label = ' to full'; }
+    else return '—';
+    if (h >= 1) return '~' + h.toFixed(1) + ' h' + label;
+    return '~' + Math.round(h * 60) + ' min' + label;
+  }
+
+  function updateNetFlow() {
+    var el = document.getElementById('jLoad');
+    if (!lastV || !lastJ) { el.textContent = '—'; return; }
+    var solarA = lastV.batteryCurrent || 0;
+    var d = junctekDirection(lastJ);
+    var sign = d.state === 'charging' ? 1 : (d.state === 'discharging' ? -1 : 0);
+    var battNetA = sign * Math.abs(lastJ.current || 0);
+    var loadA = solarA - battNetA; if (loadA < 0) loadA = 0;
+    el.textContent = '~' + loadA.toFixed(1) + ' A';
+  }
+
+  function evalAlerts() {
+    var alerts = [];
+    if (currentSoc != null && currentSoc < LOW_SOC) alerts.push('Battery low: ' + currentSoc + '%');
+    if (lastJ && lastJ.voltage != null && lastJ.voltage < LOW_VOLT) alerts.push('Low voltage: ' + lastJ.voltage.toFixed(2) + ' V');
+    if (srcWas.battery && !batteryOn) alerts.push('Battery offline');
+    if (srcWas.switches && !switchesOn) alerts.push('Switches offline');
+    var b = document.getElementById('alertBanner');
+    if (alerts.length) { b.textContent = '⚠ ' + alerts.join('   ·   '); b.style.display = 'block'; }
+    else { b.style.display = 'none'; b.textContent = ''; }
+  }
+
+  // ---- battery capacity editor (client-side; safe, no device write) ----
+  (function () {
+    var ci = document.getElementById('capInput'); if (ci) ci.value = capacity;
+    var cs = document.getElementById('capSave');
+    if (cs) cs.addEventListener('click', function () {
+      var v = parseFloat(document.getElementById('capInput').value);
+      if (v && v > 0) { capacity = v; saveCapacity(v); log('Battery capacity set to ' + v + ' Ah.'); if (lastJ) renderBattery(lastJ); }
+      else log('Enter a valid capacity in Ah.');
+    });
+  })();
+
+  // ---- MICTUNING master-power / status LED (experimental) ----
+  var masterOn = false;
+  document.getElementById('masterBtn').addEventListener('click', async function () {
+    if (!panel) { log('Connect the switch panel first.'); return; }
+    masterOn = !masterOn;
+    try { await panel.setMasterPower(masterOn); this.classList.toggle('on', masterOn); log('Master power (LED) -> ' + (masterOn ? 'ON' : 'OFF') + ' [experimental]'); }
+    catch (e) { log('Master power failed: ' + e.message); }
+  });
+
+  // ---- Connect all (one tap to start; OS still shows one picker per device) ----
+  document.getElementById('connectAll').addEventListener('click', async function () {
+    log('Connecting all — accept the device picker for each in turn.');
+    try { await connectSolar(); } catch (e) {}
+    try { await connectBattery(); } catch (e) {}
+    try { await connectSwitches(); } catch (e) {}
+  });
+
+  // ---- probe whether silent on-load reconnect is possible in this browser ----
+  (async function probeReconnect() {
+    if (navigator.bluetooth && navigator.bluetooth.getDevices) {
+      try { var ds = await navigator.bluetooth.getDevices(); log('getDevices() supported — ' + ds.length + ' known device(s). Silent reconnect-on-load is feasible (next step).'); }
+      catch (e) { log('getDevices() present but errored: ' + e.message); }
+    } else { log('getDevices() not supported here — use "Connect all"; silent on-load reconnect unavailable.'); }
+  })();
+
   // ================= SWITCHES (MICTUNING) =================
   var panel = null;
-  document.getElementById('connSwitches').addEventListener('click', async function () {
+  document.getElementById('connSwitches').addEventListener('click', connectSwitches);
+  async function connectSwitches() {
     try {
       setConnBtn('connSwitches', 'connecting');
       panel = new MictuningPanel();
       panel.onConnectionChange(function (s) {
         if (s.connected) {
-          switchesOn = true; setConnBtn('connSwitches', 'connected'); setDot('dotSwitches', true);
+          switchesOn = true; srcWas.switches = true; setConnBtn('connSwitches', 'connected'); setDot('dotSwitches', true);
           setChip('chipSwitches', 'chipSwitchesTxt', true, 'live'); refreshLiveTag();
-          document.getElementById('mCount').textContent = countOn() + ' of 12 on';
+          document.getElementById('mCount').textContent = countOn() + ' of 12 on'; evalAlerts();
         } else {
-          switchesOn = false; setDot('dotSwitches', false); setChip('chipSwitches','chipSwitchesTxt', false, 'reconnecting'); refreshLiveTag();
+          switchesOn = false; setDot('dotSwitches', false); setChip('chipSwitches','chipSwitchesTxt', false, 'reconnecting'); refreshLiveTag(); evalAlerts();
         }
       });
+      // True-state sync: reflect the panel's real on/off state from its notify (best-effort).
+      panel.onStatus(function (st) {
+        if (!st || !st.connected || !st.channels || st.channels.length < CHANNEL_COUNT) return;
+        for (var i = 0; i < CHANNEL_COUNT; i++) channelState[i] = !!st.channels[i];
+        if (!editMode) renderGrid();
+        updateCount();
+        log('Panel state synced from device: ' + countOn() + ' on');
+      });
       var name = await panel.connect();
+      try { await panel.requestStatus(); } catch (e) {}
       log('Switches connected: ' + name);
     } catch (err) {
       log('Switches connect failed: ' + err.message); setConnBtn('connSwitches', '');
     }
-  });
+  }
 
   function countOn() { var c = 0; for (var i = 0; i < CHANNEL_COUNT; i++) if (channelState[i]) c++; return c; }
   function updateCount() {
