@@ -151,18 +151,23 @@
       log('Connected to ' + name);
       log('Service UUID: ' + shunt.service.uuid);
       log('Notify char: ' + shunt.notifyChar.uuid + ', Write char: ' + shunt.writeChar.uuid);
-      var props = shunt.notifyChar.properties;
-      log('Characteristic properties: ' + JSON.stringify({
-        broadcast: props.broadcast,
-        read: props.read,
-        writeWithoutResponse: props.writeWithoutResponse,
-        write: props.write,
-        notify: props.notify,
-        indicate: props.indicate,
-        authenticatedSignedWrites: props.authenticatedSignedWrites,
-        reliableWrite: props.reliableWrite,
-        writableAuxiliaries: props.writableAuxiliaries
-      }));
+try {
+  var props = shunt.notifyChar.properties;
+  log('Properties object exists: ' + (props ? 'YES' : 'NO'));
+  if (props) {
+    log('Characteristic properties: ' + JSON.stringify({
+      broadcast: props.broadcast,
+      read: props.read,
+      writeWithoutResponse: props.writeWithoutResponse,
+      write: props.write,
+      notify: props.notify,
+      indicate: props.indicate
+    }));
+  }
+} catch (propErr) {
+  log('ERROR reading properties: ' + propErr.message);
+}
+log('=== END OF CONNECT HANDLER REACHED ===');
     } catch (err) {
       var fullMsg = 'Connection failed: ' + err.message + '\nStack: ' + (err.stack || '(no stack)');
       log(fullMsg);
