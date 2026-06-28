@@ -88,7 +88,7 @@
 
 <div class="log" id="log"></div>
 
-<script src="junctek-shunt-ble.js?v=5"></script>
+<script src="junctek-shunt-ble.js?v=6"></script>
 <script>
   function log(msg) {
     var logEl = document.getElementById('log');
@@ -120,7 +120,7 @@
     }
   });
 
-  var shunt = new JuncTekShunt();
+  var shunt = new JuncTekShunt({ batteryCapacityAh: 72 });
 
   log('Script version loaded: ' + (window.__JUNCTEK_BLE_VERSION__ || 'UNKNOWN -- old cached file is still running!'));
 
