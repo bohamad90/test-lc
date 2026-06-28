@@ -24,9 +24,9 @@
 
 const DEFAULT_PASSWORD = '11223344';
 
-console.log('>>> junctek-shunt-ble.js VERSION 5 LOADED <<<');
+console.log('>>> junctek-shunt-ble.js VERSION 6 LOADED <<<');
 if (typeof window !== 'undefined') {
-  window.__JUNCTEK_BLE_VERSION__ = 5;
+  window.__JUNCTEK_BLE_VERSION__ = 6;
 }
 
 class JuncTekShunt {
@@ -284,11 +284,19 @@ class JuncTekShunt {
     const voltage = A[0] !== undefined ? A[0] / 100 : null;
     const current = A[1] !== undefined ? A[1] / 1000 : null;
     const power = voltage !== null && current !== null ? voltage * current : null;
-    const remainingAh = A[3] !== undefined ? A[3] : null;
 
-    const fullCapacityAh = this.batteryCapacityAh || (C && C[4] !== undefined ? C[4] : null);
+    // CORRECTED via live data analysis: A[4], not A[3], is the remaining capacity field, in
+    // milliamp-hours (mAh). Confirmed by observing this field track smoothly between roughly
+    // 71953-72000 on a 72Ah battery sitting near full charge -- A[4]/1000 lands at almost
+    // exactly the battery's rated capacity, and moves smoothly with charge/discharge direction
+    // (A[2]). A[3], originally assumed to be this field per the decompiled app's apparent
+    // layout, jumps around in physically implausible ways and is NOT remaining capacity --
+    // its real meaning is still unconfirmed.
+    const remainingAh = A[4] !== undefined ? A[4] / 1000 : null;
+
+    const fullCapacityAh = this.batteryCapacityAh || null;
     const socPercent =
-      remainingAh !== null && fullCapacityAh ? Math.floor((remainingAh / fullCapacityAh) * 100) : null;
+      remainingAh !== null && fullCapacityAh ? Math.min(100, Math.floor((remainingAh / fullCapacityAh) * 100)) : null;
 
     const reading = {
       connected: true,
