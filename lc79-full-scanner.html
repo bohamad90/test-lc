@@ -133,15 +133,22 @@ function sendCommand(cmd, timeoutMs) {
 
 // Fast, single-attempt sender for brute-force scanning - no retry,
 // short timeout, since a missed PID just gets skipped (not fatal).
-// On timeout, waits briefly to let any late/straggling BLE packets drain
+// On timeout, sends a stray byte to interrupt any pending ELM327 operation
+// (ELM327 aborts on receiving any character while busy), then settles
 // before the caller sends the next command.
 async function sendFast(cmd, timeoutMs) {
   timeoutMs = timeoutMs || 4000;
   try {
     return await sendCommand(cmd, timeoutMs);
   } catch (err) {
-    await new Promise(r => setTimeout(r, 400));
+    try {
+      // Send a single CR to interrupt/abort whatever the adapter is doing
+      const encoder = new TextEncoder();
+      await writeChar.writeValue(encoder.encode('\r'));
+    } catch (e2) { /* ignore - best effort interrupt */ }
+    await new Promise(r => setTimeout(r, 500));
     rxBuffer = '';
+    responseResolve = null;
     return 'TIMEOUT';
   }
 }
@@ -366,18 +373,20 @@ document.getElementById('knownBtn').addEventListener('click', async () => {
   document.getElementById('exportBtn').disabled = false;
 });
 
-// ---------- BRUTE FORCE 2100-213C ----------
+// ---------- BRUTE FORCE 2100-213C (resumable) ----------
+let bruteForceIndex = 0; // persists across clicks so we can resume after a stall
+
 document.getElementById('bruteBtn').addEventListener('click', async () => {
   if (scanBusy) return;
   window.__debugLive = true;
   lockButtons(true);
-  document.querySelector('#bruteTable tbody').innerHTML = '';
   const start = 0x00, end = 0x3C;
   const total = end - start + 1;
-  let found = 0;
+  let found = allResults.filter(r => r.section === 'brute21').length;
   const scanStart = Date.now();
 
-  for (let i = start; i <= end; i++) {
+  for (let i = start + bruteForceIndex; i <= end; i++) {
+    bruteForceIndex = i - start; // save progress BEFORE the potentially-hanging call
     const pidHex = i.toString(16).toUpperCase().padStart(2, '0');
     const cmd = '21' + pidHex;
     const elapsed = ((Date.now() - scanStart) / 1000).toFixed(0);
@@ -390,13 +399,19 @@ document.getElementById('bruteBtn').addEventListener('click', async () => {
       addRow('bruteTable', cmd, undefined, hex, undefined);
       allResults.push({ section: 'brute21', cmd, raw, hex });
     }
+    bruteForceIndex = i - start + 1; // mark this PID fully done
+    if (hex.length > 40) {
+      await new Promise(r => setTimeout(r, 600));
+    }
   }
   window.__debugLive = false;
   showProgress(1,1,'');
   const totalTime = ((Date.now() - scanStart)/1000).toFixed(0);
-  setStatus('Brute-force complete in ' + totalTime + 's. ' + found + ' of ' + total + ' PIDs responded.', 'ok');
+  setStatus('Brute-force complete in ' + totalTime + 's. ' + found + ' total PIDs found.', 'ok');
   lockButtons(false);
   document.getElementById('exportBtn').disabled = false;
+  bruteForceIndex = 0; // reset for a future fresh run
+  document.getElementById('bruteBtn').textContent = '4. Brute-Force 2100-213C';
 });
 
 // ---------- FORCE RESET ----------
@@ -408,7 +423,12 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   showProgress(1,1,'');
   const dbg = document.getElementById('liveDebug');
   if (dbg) dbg.textContent = '';
-  setStatus('Reset. State cleared - ready to scan again.', 'warn');
+  if (bruteForceIndex > 0 && bruteForceIndex < 0x3D) {
+    document.getElementById('bruteBtn').textContent = '4. Continue Brute-Force (from 21' + bruteForceIndex.toString(16).toUpperCase().padStart(2,'0') + ')';
+    setStatus('Reset. Brute-force stalled at PID 21' + bruteForceIndex.toString(16).toUpperCase().padStart(2,'0') + ' - tap button 4 to continue from there.', 'warn');
+  } else {
+    setStatus('Reset. State cleared - ready to scan again.', 'warn');
+  }
 });
 
 // ---------- EXPORT ----------
