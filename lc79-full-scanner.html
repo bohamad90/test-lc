@@ -38,6 +38,7 @@
 <div id="progressWrap" style="display:none">
   <progress id="progressBar" value="0" max="100"></progress>
   <div id="progressLabel" class="info"></div>
+  <div id="liveDebug" class="warn" style="font-size:11px;margin-top:4px"></div>
 </div>
 
 <h3>Mode 01 - Standard PIDs Supported</h3>
@@ -83,7 +84,12 @@ const setStatus = (msg, cls) => {
 function handleNotify(event) {
   const value = event.target.value;
   const decoder = new TextDecoder('ascii');
-  rxBuffer += decoder.decode(value);
+  const chunk = decoder.decode(value);
+  rxBuffer += chunk;
+  if (window.__debugLive) {
+    const dbg = document.getElementById('liveDebug');
+    if (dbg) dbg.textContent = 'last RX chunk: ' + JSON.stringify(chunk) + ' | buffer len: ' + rxBuffer.length;
+  }
   if (rxBuffer.includes('>')) {
     const fullResponse = rxBuffer;
     rxBuffer = '';
@@ -118,11 +124,15 @@ function sendCommand(cmd, timeoutMs) {
 
 // Fast, single-attempt sender for brute-force scanning - no retry,
 // short timeout, since a missed PID just gets skipped (not fatal).
+// On timeout, waits briefly to let any late/straggling BLE packets drain
+// before the caller sends the next command.
 async function sendFast(cmd, timeoutMs) {
-  timeoutMs = timeoutMs || 2500;
+  timeoutMs = timeoutMs || 4000;
   try {
     return await sendCommand(cmd, timeoutMs);
   } catch (err) {
+    await new Promise(r => setTimeout(r, 400));
+    rxBuffer = '';
     return 'TIMEOUT';
   }
 }
@@ -334,6 +344,7 @@ document.getElementById('knownBtn').addEventListener('click', async () => {
 
 // ---------- BRUTE FORCE 2100-213C ----------
 document.getElementById('bruteBtn').addEventListener('click', async () => {
+  window.__debugLive = true;
   document.getElementById('bruteBtn').disabled = true;
   document.querySelector('#bruteTable tbody').innerHTML = '';
   const start = 0x00, end = 0x3C;
@@ -346,7 +357,7 @@ document.getElementById('bruteBtn').addEventListener('click', async () => {
     const cmd = '21' + pidHex;
     const elapsed = ((Date.now() - scanStart) / 1000).toFixed(0);
     showProgress(i - start + 1, total, cmd + ' | ' + (i-start+1) + '/' + total + ' | ' + elapsed + 's elapsed | found ' + found);
-    const raw = await sendFast(cmd, 2500);
+    const raw = await sendFast(cmd);
     const hex = cleanHex(raw);
     const respCode = '61' + pidHex;
     if (hex.includes(respCode) && !hex.includes('7F21')) {
@@ -355,6 +366,7 @@ document.getElementById('bruteBtn').addEventListener('click', async () => {
       allResults.push({ section: 'brute21', cmd, raw, hex });
     }
   }
+  window.__debugLive = false;
   showProgress(1,1,'');
   const totalTime = ((Date.now() - scanStart)/1000).toFixed(0);
   setStatus('Brute-force complete in ' + totalTime + 's. ' + found + ' of ' + total + ' PIDs responded.', 'ok');
