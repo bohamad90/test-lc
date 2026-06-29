@@ -1,5 +1,5 @@
 /**
- * victron-ble.js  --  VERSION 8
+ * victron-ble.js  --  VERSION 9 (adds advertisement re-arm: foreground + watchdog)
  *
  * Web Bluetooth client for Victron "Instant Readout" BLE advertisements (SmartSolar MPPT,
  * SmartShunt, BMV, etc). Victron devices broadcast their (encrypted) status in BLE
@@ -104,6 +104,9 @@ class VictronBLE {
     this._loggedRawOnce = false;
     this._adsSeen = 0;
     this._victronAdsSeen = 0;
+    this._lastAdTime = 0;
+    this._watchdog = null;
+    this._visibilityHooked = false;
     this._cryptoKeyPromise = this.encryptionKey ? this._importKey(this.encryptionKey) : null;
   }
 
@@ -151,14 +154,58 @@ class VictronBLE {
       self._handleAdvertisement(event);
     });
     await this.device.watchAdvertisements();
+    this._lastAdTime = Date.now();
+    this._startWatchdog();
+    this._hookVisibility();
 
     return this.device.name || 'Victron device';
   }
 
   stopWatching() {
+    if (this._watchdog) { clearInterval(this._watchdog); this._watchdog = null; }
     if (this.device && typeof this.device.unwatchAdvertisements === 'function') {
       try { this.device.unwatchAdvertisements(); } catch (e) {}
     }
+  }
+
+  /** Re-arm advertisement watching on the SAME device -- no picker / no user gesture needed.
+   *  Bluefy/iOS stops delivering advertisements when the page is backgrounded or the screen
+   *  locks, and does not resume on its own; this brings the live data back. */
+  _rewatch() {
+    if (!this.device || typeof this.device.watchAdvertisements !== 'function') return;
+    var self = this;
+    try { if (typeof this.device.unwatchAdvertisements === 'function') this.device.unwatchAdvertisements(); } catch (e) {}
+    try {
+      var p = this.device.watchAdvertisements();
+      if (p && typeof p.catch === 'function') p.catch(function (e) { self._debug('re-watch error: ' + e.message); });
+    } catch (e) { self._debug('re-watch threw: ' + e.message); }
+    this._lastAdTime = Date.now();
+  }
+
+  /** Watchdog: if no advertisement has arrived for >8s, re-arm. Catches Bluefy silently stopping. */
+  _startWatchdog() {
+    if (this._watchdog) return;
+    var self = this;
+    this._watchdog = setInterval(function () {
+      if (!self.device) return;
+      if (Date.now() - self._lastAdTime > 8000) {
+        self._debug('No Victron advertisements for >8s -- re-arming.');
+        self._rewatch();
+      }
+    }, 4000);
+  }
+
+  /** Re-arm whenever the page returns to the foreground (the common stall trigger on iOS). */
+  _hookVisibility() {
+    if (this._visibilityHooked || typeof document === 'undefined') return;
+    this._visibilityHooked = true;
+    var self = this;
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && self.device) {
+        self._debug('Foreground -- re-arming Victron listen.');
+        self._rewatch();
+      }
+    });
   }
 
   async setEncryptionKey(hexKey) {
@@ -259,6 +306,7 @@ class VictronBLE {
   async _handleAdvertisement(event) {
     try {
       this._adsSeen++;
+      this._lastAdTime = Date.now();
 
       if (!this._dumpedEventOnce) {
         this._dumpedEventOnce = true;
@@ -404,9 +452,9 @@ if (typeof module !== 'undefined' && module.exports) {
   window.VictronBLE = VictronBLE;
 }
 
-console.log('>>> victron-ble.js VERSION 8 LOADED <<<');
+console.log('>>> victron-ble.js VERSION 9 LOADED <<<');
 if (typeof window !== 'undefined') {
-  window.__VICTRON_BLE_VERSION__ = 8;
+  window.__VICTRON_BLE_VERSION__ = 9;
 }
 
 VictronBLE.CHARGER_STATES = {

@@ -44,22 +44,33 @@ Victron's broadcast data is encrypted per-device. You only need to do this once:
 This key goes into the dashboard once and is then stored locally — same as Bluefy permissions,
 no internet involved.
 
-## Packet structure (manufacturer data, ID 0x02E1)
+## Packet structure (manufacturer-data VALUE, company ID 0x02E1)
+
+These offsets are relative to the manufacturer-data **value** — i.e. the bytes **after** the
+2-byte company id (`E1 02`). This matches the reference layout in `keshavdv/victron-ble` and is
+what `victron-ble.js` v8 implements. **CONFIRMED working live on a SmartSolar MPPT 100/30.**
 
 | Bytes | Field |
 |---|---|
-| `[2]` | Record type — `0x10` = Product Advertisement (Instant Readout). Other values exist for other broadcast types; this client only handles `0x10`. |
-| `[3]` | Unknown/version-ish byte (not used) |
-| `[4]` | Device state byte (not decoded by this client yet) |
-| `[5:7]` | Nonce / data counter, little-endian uint16 — doubles as the AES-CTR counter |
-| `[7]` | Key-check byte — should equal the first byte of your encryption key. The client checks this and warns if it doesn't match (almost always means wrong key). |
+| `[0:2]` | Prefix, little-endian uint16. Low byte `0x10` marks an Instant Readout product advertisement. |
+| `[2:4]` | Model id, little-endian uint16 |
+| `[4]` | Readout type |
+| `[5:7]` | IV / nonce, little-endian uint16 — the AES-CTR counter initial value |
+| `[7]` | Key-check byte — must equal the first byte of your encryption key (wrong key ⇒ mismatch). |
 | `[8:]` | Encrypted payload (AES-128-CTR) |
 
-Decryption: AES-128-CTR using your encryption key, with the counter block built from bytes
-`[5:7]` zero-padded to 16 bytes. This matches the well-established approach used by the
-`keshavdv/victron-ble` (Python) and `node-red-contrib-victron-ble` (TypeScript) community
-libraries — `victron-ble.js` ports this to the browser's native Web Crypto API rather than
-pulling in an external AES library.
+Decryption: AES-128-CTR using your encryption key, with the 16-byte counter block = IV bytes
+`[5:7]` in the first two positions, little-endian, rest zero. Mirrors `keshavdv/victron-ble`
+(Python) and `node-red-contrib-victron-ble` (TypeScript), ported to Web Crypto.
+
+> ⚠️ **Two bugs that blocked this until v8 — do not reintroduce:**
+> 1. **Shape:** desktop Chrome exposes `event.manufacturerData` as a `Map` keyed by company id
+>    (use `.get(0x02E1)`), but **Bluefy/iOS exposes it as a single raw `DataView`** holding the
+>    manufacturer data directly (no Map, no keys, no `.get`). v8 handles both. On Bluefy the
+>    `DataView` may or may not include the `E1 02` company-id prefix, so v8 strips it if present.
+> 2. **Offsets:** the earlier framing read the IV at `[5:7]`/key-check at `[7]` **of the
+>    company-id-inclusive bytes**, which is 2 bytes too early. The value-relative offsets above
+>    are correct.
 
 ## Decrypted payload layout (varies per device type)
 
@@ -105,7 +116,30 @@ Charger" class with no known quirks):
 
 **Worth double-checking once you're testing live, just as a sanity check, not because of any
 known issue:**
-- The `deviceState` enum values (0 = off, 3 = bulk, 4 = absorption, 5 = float, etc., per
-  Victron's charger state table) aren't mapped to readable names yet in this client — easy to
-  add once you can see what your unit actually reports. Worth pairing your first live test with
+- The `deviceState` enum is **now mapped** to readable names via `VictronBLE.CHARGER_STATES`
+  (0 = Off, 3 = Bulk, 4 = Absorption, 5 = Float, etc.). Worth pairing your first live test with
   VictronConnect open side-by-side to confirm voltage/current/yield numbers match exactly.
+
+---
+
+## Current status — RESOLVED / WORKING (v8)
+
+**Live readings confirmed on Bluefy/iOS against the real SmartSolar MPPT 100/30.** Battery
+voltage and yield-today read correctly; battery current and PV power read 0 at night (no sun),
+as expected — to be re-confirmed in daylight against VictronConnect side-by-side.
+
+- **Device encryption key:** `6cc611245a854a60cde278f036c5c98a`
+- **What was actually wrong (two bugs, both fixed in v8 — see the ⚠️ note under "Packet
+  structure"):**
+  1. Bluefy returns `event.manufacturerData` as a single raw `DataView`, not a spec `Map`. The
+     old `mfgDataKeys()`/`.get()` path saw no keys and reported "no Victron data" forever.
+  2. The frame offsets were 2 bytes too early (IV/key-check/ciphertext).
+- **How it was diagnosed:** the v7 build delivered the first-advertisement event dump into a
+  dedicated, copyable on-screen panel (instead of letting it scroll away under ~1 log line/sec).
+  The dump showed `manufacturerData` had `constructor=DataView`, which pointed straight at bug 1.
+- **Confirmed irrelevant in the end:** signal strength, `optionalManufacturerData`, the
+  `rssi=127` sentinel — none were the cause.
+
+### Live verification still to do (daylight)
+Open VictronConnect next to the dashboard for a minute in sunlight and confirm battery current,
+PV power, and charger state (Bulk/Absorption/Float) match. Voltage + yield already verified.
