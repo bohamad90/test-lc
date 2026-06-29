@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Trans Temp Drive Logger</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #111; color: #0f0; padding: 16px; font-size: 14px; }
+  button { font-size: 18px; padding: 12px 20px; margin: 4px 4px 16px 0; background: #222; color: #0f0; border: 1px solid #0f0; border-radius: 8px; }
+  button:disabled { opacity: 0.4; }
+  .big { font-size: 42px; font-weight: bold; text-align: center; margin: 12px 0; }
+  .label { font-size: 14px; color: #888; text-align: center; }
+  .row { display: flex; justify-content: space-around; margin-bottom: 16px; }
+  .box { background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 12px; flex: 1; margin: 0 4px; text-align: center; }
+  .err { color: #f55; }
+  .info { color: #aaa; font-size: 12px; }
+  .ok { color: #5f5; }
+  table { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: 12px; }
+  td, th { padding: 4px 6px; border-bottom: 1px solid #333; text-align: left; }
+  #log { max-height: 300px; overflow-y: auto; }
+</style>
+</head>
+<body>
+<h2>Transmission Temp - Drive Logger</h2>
+<div id="status" class="info">Not connected</div>
+<button id="connectBtn">1. Connect &amp; Init</button>
+<button id="startBtn" disabled>2. Start Logging</button>
+<button id="stopBtn" disabled>Stop</button>
+
+<div class="row">
+  <div class="box">
+    <div class="big" id="panTemp">--</div>
+    <div class="label">PAN °C</div>
+  </div>
+  <div class="box">
+    <div class="big" id="convTemp">--</div>
+    <div class="label">CONVERTER °C</div>
+  </div>
+  <div class="box">
+    <div class="big" id="readCount">0</div>
+    <div class="label">READINGS</div>
+  </div>
+</div>
+
+<table id="log">
+  <thead><tr><th>Time</th><th>Pan °C</th><th>Conv °C</th><th>Raw</th></tr></thead>
+  <tbody id="logBody"></tbody>
+</table>
+
+<script>
+const FFF0_SERVICE = '0000fff0-0000-1000-8000-00805f9b34fb';
+const FFF1_NOTIFY   = '0000fff1-0000-1000-8000-00805f9b34fb';
+const FFF2_WRITE     = '0000fff2-0000-1000-8000-00805f9b34fb';
+
+let device, server, writeChar, notifyChar;
+let rxBuffer = '';
+let responseResolve = null;
+let pollTimer = null;
+let readCount = 0;
+
+const setStatus = (msg, cls) => {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls || 'info';
+};
+
+function handleNotify(event) {
+  const value = event.target.value;
+  const decoder = new TextDecoder('ascii');
+  rxBuffer += decoder.decode(value);
+  if (rxBuffer.includes('>')) {
+    const fullResponse = rxBuffer;
+    rxBuffer = '';
+    if (responseResolve) {
+      responseResolve(fullResponse);
+      responseResolve = null;
+    }
+  }
+}
+
+function sendCommand(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 4000;
+  return new Promise(async (resolve, reject) => {
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(cmd + '\r');
+      responseResolve = resolve;
+      await writeChar.writeValue(data);
+      setTimeout(() => {
+        if (responseResolve) {
+          responseResolve = null;
+          reject(new Error('Timeout: ' + cmd));
+        }
+      }, timeoutMs);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+// Parses a raw ELM327 response string for the 2182 Mode 21 reply
+// Expected pattern (headers on): 7E8 06 61 82 AA BB CC DD
+function parseTransTemp(raw) {
+  // Strip whitespace/CR artifacts, find the hex frame
+  const cleaned = raw.replace(/SEARCHING\.\.\.\r?/g, '').trim();
+  // Find a line that looks like a CAN frame ending in our PID echo "6182"
+  const lines = cleaned.split(/\r+/).map(l => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const hexOnly = line.replace(/[^0-9A-Fa-f]/g, '');
+    const idx = hexOnly.indexOf('6182');
+    if (idx !== -1) {
+      // bytes after "6182" should be AA BB CC DD (8 hex chars)
+      const dataHex = hexOnly.substring(idx + 4);
+      if (dataHex.length >= 8) {
+        const A = parseInt(dataHex.substring(0, 2), 16);
+        const B = parseInt(dataHex.substring(2, 4), 16);
+        const C = parseInt(dataHex.substring(4, 6), 16);
+        const D = parseInt(dataHex.substring(6, 8), 16);
+        const rawPan = (A * 256) + B;
+        const rawConv = (C * 256) + D;
+        const panF = ((rawPan * 7 / 100) - 400) / 10;
+        const convF = ((rawConv * 7 / 100) - 400) / 10;
+        const panC = (panF - 32) * 5 / 9;
+        const convC = (convF - 32) * 5 / 9;
+        return { panC, convC, rawHex: hexOnly, ok: true };
+      }
+    }
+  }
+  return { ok: false, rawHex: cleaned };
+}
+
+function addLogRow(time, panC, convC, raw) {
+  const tbody = document.getElementById('logBody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<td>' + time + '</td><td>' + (panC !== null ? panC.toFixed(1) : '--') +
+                 '</td><td>' + (convC !== null ? convC.toFixed(1) : '--') +
+                 '</td><td style="font-size:10px;color:#666">' + raw + '</td>';
+  tbody.insertBefore(tr, tbody.firstChild);
+}
+
+document.getElementById('connectBtn').addEventListener('click', async () => {
+  try {
+    setStatus('Requesting device...', 'info');
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [FFF0_SERVICE]
+    });
+    setStatus('Connecting...', 'info');
+    server = await device.gatt.connect();
+    const service = await server.getPrimaryService(FFF0_SERVICE);
+    writeChar = await service.getCharacteristic(FFF2_WRITE);
+    notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
+
+    setStatus('Running init...', 'info');
+    await sendCommand('ATZ', 3000);
+    await new Promise(r => setTimeout(r, 1000));
+    await sendCommand('ATE0');
+    await sendCommand('ATL0');
+    await sendCommand('ATH1');
+    await sendCommand('ATS0');
+    await sendCommand('ATSP0');
+
+    setStatus('Connected & initialized. Ready to log.', 'ok');
+    document.getElementById('startBtn').disabled = false;
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'err');
+    console.error(err);
+  }
+});
+
+async function pollOnce() {
+  try {
+    const resp = await sendCommand('2182');
+    const result = parseTransTemp(resp);
+    const time = new Date().toLocaleTimeString();
+    readCount++;
+    document.getElementById('readCount').textContent = readCount;
+    if (result.ok) {
+      document.getElementById('panTemp').textContent = result.panC.toFixed(1);
+      document.getElementById('convTemp').textContent = result.convC.toFixed(1);
+      addLogRow(time, result.panC, result.convC, result.rawHex);
+    } else {
+      addLogRow(time, null, null, 'PARSE FAIL: ' + result.rawHex);
+    }
+  } catch (err) {
+    addLogRow(new Date().toLocaleTimeString(), null, null, 'ERR: ' + err.message);
+  }
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  setStatus('Logging every 2s...', 'ok');
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  pollOnce();
+  pollTimer = setInterval(pollOnce, 2000);
+});
+
+document.getElementById('stopBtn').addEventListener('click', () => {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+  setStatus('Stopped. Connected, ready to resume.', 'info');
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+});
+</script>
+</body>
+</html>
