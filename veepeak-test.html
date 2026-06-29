@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Veepeak ELM327 Test</title>
+<style>
+  body { font-family: -apple-system, monospace; background: #111; color: #0f0; padding: 16px; font-size: 14px; }
+  button { font-size: 16px; padding: 10px 16px; margin: 4px 4px 16px 0; background: #222; color: #0f0; border: 1px solid #0f0; border-radius: 8px; }
+  button:disabled { opacity: 0.4; }
+  .tx { color: #0ff; }
+  .rx { color: #ff0; }
+  .err { color: #f55; }
+  .info { color: #aaa; }
+  .ok { color: #5f5; font-weight: bold; }
+  pre { white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+<h2>Veepeak ELM327 BLE Test</h2>
+<div id="status" class="info">Not connected</div>
+<button id="connectBtn">1. Connect</button>
+<button id="initBtn" disabled>2. Run AT Init</button>
+<button id="rpmBtn" disabled>3. Test RPM (Mode 01)</button>
+<button id="customBtn" disabled>4. Send Custom Command</button>
+<pre id="log"></pre>
+
+<script>
+const FFF0_SERVICE = '0000fff0-0000-1000-8000-00805f9b34fb';
+const FFF1_NOTIFY   = '0000fff1-0000-1000-8000-00805f9b34fb';
+const FFF2_WRITE     = '0000fff2-0000-1000-8000-00805f9b34fb';
+
+let device, server, writeChar, notifyChar;
+let rxBuffer = '';
+let responseResolve = null;
+
+const log = (msg, cls) => {
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  el.appendChild(line);
+  window.scrollTo(0, document.body.scrollHeight);
+};
+
+const setStatus = (msg, cls) => {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls || 'info';
+};
+
+function handleNotify(event) {
+  const value = event.target.value;
+  const decoder = new TextDecoder('ascii');
+  const chunk = decoder.decode(value);
+  rxBuffer += chunk;
+  log('RX chunk: ' + JSON.stringify(chunk), 'rx');
+
+  // ELM327 terminates responses with '>' prompt character
+  if (rxBuffer.includes('>')) {
+    const fullResponse = rxBuffer;
+    rxBuffer = '';
+    log('--- Full response: ' + JSON.stringify(fullResponse), 'ok');
+    if (responseResolve) {
+      responseResolve(fullResponse);
+      responseResolve = null;
+    }
+  }
+}
+
+// Sends a command string, appends carriage return, returns a Promise
+// that resolves with the full accumulated response once '>' is seen.
+function sendCommand(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 5000;
+  return new Promise(async (resolve, reject) => {
+    try {
+      log('TX: ' + cmd, 'tx');
+      const encoder = new TextEncoder();
+      const data = encoder.encode(cmd + '\r');
+      responseResolve = resolve;
+      await writeChar.writeValue(data);
+      setTimeout(() => {
+        if (responseResolve) {
+          responseResolve = null;
+          reject(new Error('Timeout waiting for response to: ' + cmd));
+        }
+      }, timeoutMs);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+document.getElementById('connectBtn').addEventListener('click', async () => {
+  try {
+    setStatus('Requesting device...', 'info');
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [FFF0_SERVICE]
+    });
+
+    log('Device: ' + device.name, 'info');
+    setStatus('Connecting GATT...', 'info');
+    server = await device.gatt.connect();
+
+    const service = await server.getPrimaryService(FFF0_SERVICE);
+    writeChar = await service.getCharacteristic(FFF2_WRITE);
+    notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
+
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
+
+    setStatus('Connected. Ready for AT init.', 'ok');
+    log('Connected and subscribed to notifications.', 'ok');
+    document.getElementById('initBtn').disabled = false;
+  } catch (err) {
+    setStatus('Connection failed', 'err');
+    log('ERROR: ' + err.message, 'err');
+    console.error(err);
+  }
+});
+
+document.getElementById('initBtn').addEventListener('click', async () => {
+  try {
+    setStatus('Running AT init sequence...', 'info');
+
+    // Standard ELM327 init sequence
+    await sendCommand('ATZ', 3000);      // reset
+    await new Promise(r => setTimeout(r, 1000));
+    await sendCommand('ATE0');           // echo off
+    await sendCommand('ATL0');           // linefeeds off
+    await sendCommand('ATH1');           // headers ON (we need these for Mode 21 module addressing later)
+    await sendCommand('ATS0');           // spaces off
+    await sendCommand('ATSP0');          // auto-detect protocol
+
+    setStatus('AT init complete.', 'ok');
+    log('=== AT INIT SEQUENCE COMPLETE ===', 'ok');
+    document.getElementById('rpmBtn').disabled = false;
+    document.getElementById('customBtn').disabled = false;
+  } catch (err) {
+    setStatus('Init failed', 'err');
+    log('ERROR: ' + err.message, 'err');
+  }
+});
+
+document.getElementById('rpmBtn').addEventListener('click', async () => {
+  try {
+    setStatus('Requesting RPM (010C)...', 'info');
+    const response = await sendCommand('010C');
+    setStatus('RPM test complete - check log', 'ok');
+  } catch (err) {
+    setStatus('RPM request failed', 'err');
+    log('ERROR: ' + err.message, 'err');
+  }
+});
+
+document.getElementById('customBtn').addEventListener('click', async () => {
+  const cmd = prompt('Enter command to send (e.g. 2182 or ATDPN):');
+  if (!cmd) return;
+  try {
+    setStatus('Sending custom command...', 'info');
+    await sendCommand(cmd.trim());
+    setStatus('Custom command complete - check log', 'ok');
+  } catch (err) {
+    setStatus('Custom command failed', 'err');
+    log('ERROR: ' + err.message, 'err');
+  }
+});
+</script>
+</body>
+</html>
