@@ -146,14 +146,19 @@ async function sendFast(cmd, timeoutMs) {
   }
 }
 
-// Sends a command, retries once on timeout, returns raw string or 'TIMEOUT'/'NO DATA'
+// Sends a command, retries once on timeout, returns raw string or 'TIMEOUT'.
+// Clears any stale buffer and waits briefly between attempts so a late/straggling
+// BLE packet from the failed attempt can't corrupt the retry's response.
 async function sendWithRetry(cmd, timeoutMs) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const resp = await sendCommand(cmd, timeoutMs);
       return resp;
     } catch (err) {
+      rxBuffer = '';
+      responseResolve = null;
       if (attempt === 1) return 'TIMEOUT';
+      await new Promise(r => setTimeout(r, 400));
     }
   }
 }
@@ -329,11 +334,13 @@ const KNOWN_PIDS = [
 
 document.getElementById('knownBtn').addEventListener('click', async () => {
   if (scanBusy) return;
+  window.__debugLive = true;
   lockButtons(true);
   setStatus('Testing known Toyota Mode 21 PIDs...', 'info');
   document.querySelector('#knownTable tbody').innerHTML = '';
 
   for (const def of KNOWN_PIDS) {
+    showProgress(0, 1, 'Testing ' + def.pid + ' (' + def.name + ')...');
     const raw = await sendWithRetry(def.pid, 6000);
     const hex = cleanHex(raw);
     const respCode = '61' + def.pid.substring(2);
@@ -348,6 +355,8 @@ document.getElementById('knownBtn').addEventListener('click', async () => {
     addRow('knownTable', def.pid, def.name, hex || raw, decoded);
     allResults.push({ section: 'known21', cmd: def.pid, name: def.name, raw, decoded });
   }
+  window.__debugLive = false;
+  showProgress(1,1,'');
   setStatus('Known PID test complete.', 'ok');
   lockButtons(false);
   document.getElementById('exportBtn').disabled = false;
