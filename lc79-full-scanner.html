@@ -250,6 +250,10 @@ function showProgress(current, total, label) {
   wrap.style.display = current < total ? 'block' : 'none';
   document.getElementById('progressBar').value = (current/total)*100;
   document.getElementById('progressLabel').textContent = label;
+  if (current >= total) {
+    const dbg = document.getElementById('liveDebug');
+    if (dbg) dbg.textContent = '';
+  }
 }
 
 // ---------- MODE 01 SCAN ----------
@@ -402,6 +406,8 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   window.__debugLive = false;
   lockButtons(false);
   showProgress(1,1,'');
+  const dbg = document.getElementById('liveDebug');
+  if (dbg) dbg.textContent = '';
   setStatus('Reset. State cleared - ready to scan again.', 'warn');
 });
 
