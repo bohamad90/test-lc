@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>LC79 Multi-PID Drive Logger</title>
+<style>
+  body { font-family: -apple-system, monospace; background: #0d0d0d; color: #0f0; padding: 12px; font-size: 12px; }
+  h2 { font-size: 17px; margin-bottom: 4px; }
+  button { font-size: 15px; padding: 10px 14px; margin: 3px 3px 10px 0; background: #1e1e1e; color: #0f0; border: 1px solid #0f0; border-radius: 8px; }
+  button:disabled { opacity: 0.35; }
+  button.danger { color: #f80; border-color: #f80; }
+  #status { padding: 8px; background: #1a1a1a; border-radius: 6px; margin-bottom: 8px; }
+  .err { color: #f55; }
+  .info { color: #aaa; }
+  .ok { color: #5f5; }
+  .warn { color: #fa0; }
+  table { width: 100%; font-size: 10px; border-collapse: collapse; margin-top: 6px; }
+  td, th { padding: 3px 4px; border-bottom: 1px solid #2a2a2a; text-align: left; vertical-align: top; white-space: nowrap; }
+  th { color: #888; position: sticky; top: 0; background: #0d0d0d; }
+  .pidcol { color: #0ff; font-weight: bold; }
+  .scrollbox { max-height: 420px; overflow: auto; border: 1px solid #2a2a2a; border-radius: 6px; }
+  .refcol { color: #ff0; }
+  select { background: #1a1a1a; color: #0f0; border: 1px solid #333; padding: 6px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<h2>LC79 Multi-PID Drive Logger</h2>
+<div id="status" class="info">Not connected</div>
+
+<button id="connectBtn">1. Connect &amp; Init</button>
+<button id="startBtn" disabled>2. Start Logging</button>
+<button id="stopBtn" disabled>Stop</button>
+<button id="resetBtn" class="danger">Force Reset</button>
+<br>
+<label>Cycle delay between full rounds: </label>
+<select id="cycleDelay">
+  <option value="0">None (fastest)</option>
+  <option value="1000" selected>1s</option>
+  <option value="3000">3s</option>
+</select>
+<div id="cycleInfo" class="info"></div>
+
+<div class="scrollbox">
+<table id="logTable">
+  <thead><tr id="logHeader"></tr></thead>
+  <tbody id="logBody"></tbody>
+</table>
+</div>
+
+<script>
+const FFF0_SERVICE = '0000fff0-0000-1000-8000-00805f9b34fb';
+const FFF1_NOTIFY   = '0000fff1-0000-1000-8000-00805f9b34fb';
+const FFF2_WRITE     = '0000fff2-0000-1000-8000-00805f9b34fb';
+
+let device, server, writeChar, notifyChar;
+let rxBuffer = '';
+let responseResolve = null;
+let scanBusy = false;
+let cycleTimer = null;
+let cycleCount = 0;
+
+const setStatus = (msg, cls) => {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls || 'info';
+};
+
+function handleNotify(event) {
+  const value = event.target.value;
+  const decoder = new TextDecoder('ascii');
+  rxBuffer += decoder.decode(value);
+  if (rxBuffer.includes('>')) {
+    const fullResponse = rxBuffer;
+    rxBuffer = '';
+    if (responseResolve) {
+      responseResolve(fullResponse);
+      responseResolve = null;
+    }
+  }
+}
+
+function sendCommand(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 4000;
+  return new Promise(async (resolve, reject) => {
+    try {
+      rxBuffer = '';
+      const encoder = new TextEncoder();
+      const data = encoder.encode(cmd + '\r');
+      responseResolve = resolve;
+      await writeChar.writeValue(data);
+      setTimeout(() => {
+        if (responseResolve) {
+          responseResolve = null;
+          rxBuffer = '';
+          reject(new Error('Timeout: ' + cmd));
+        }
+      }, timeoutMs);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+async function sendFast(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 3000;
+  try {
+    return await sendCommand(cmd, timeoutMs);
+  } catch (err) {
+    try {
+      const encoder = new TextEncoder();
+      await writeChar.writeValue(encoder.encode('\r'));
+    } catch (e2) {}
+    await new Promise(r => setTimeout(r, 300));
+    rxBuffer = '';
+    responseResolve = null;
+    return 'TIMEOUT';
+  }
+}
+
+function cleanHex(raw) {
+  return raw.replace(/SEARCHING\.\.\.\r?/g, '')
+            .replace(/[^0-9A-Fa-f]/g, '')
+            .toUpperCase();
+}
+
+// All 30 confirmed-responsive Mode 21 PIDs from the brute-force scan,
+// plus key Mode 01 reference values for correlation.
+const MODE01_REF = ['0C', '0D', '11', '05']; // RPM, Speed, Throttle, Coolant
+const MODE21_PIDS = [
+  '00','01','03','04','05','06','08',
+  '10','11','12','13','14','15','16','17','18','19', // the big 9-frame ones
+  '20','23','25','26','28','29','2A','2B',
+  '33','37','39','3A','3C'
+];
+
+function extractData(cmd, raw) {
+  const hex = cleanHex(raw);
+  const isMode01 = cmd.startsWith('01');
+  const respCode = (isMode01 ? '41' : '61') + cmd.substring(2);
+  const idx = hex.indexOf(respCode);
+  if (idx === -1) return raw === 'TIMEOUT' ? 'TIMEOUT' : 'no-match';
+  return hex.substring(idx + 4) || '(empty)';
+}
+
+// Build table header once
+function buildHeader() {
+  const header = document.getElementById('logHeader');
+  let html = '<th>Time</th>';
+  for (const p of MODE01_REF) html += '<th class="refcol">01' + p + '</th>';
+  for (const p of MODE21_PIDS) html += '<th class="pidcol">21' + p + '</th>';
+  header.innerHTML = html;
+}
+
+document.getElementById('connectBtn').addEventListener('click', async () => {
+  try {
+    setStatus('Requesting device...', 'info');
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [FFF0_SERVICE]
+    });
+    setStatus('Connecting...', 'info');
+    server = await device.gatt.connect();
+    const service = await server.getPrimaryService(FFF0_SERVICE);
+    writeChar = await service.getCharacteristic(FFF2_WRITE);
+    notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
+
+    setStatus('Running init...', 'info');
+    await sendCommand('ATZ', 3000);
+    await new Promise(r => setTimeout(r, 1000));
+    await sendCommand('ATE0');
+    await sendCommand('ATL0');
+    await sendCommand('ATH1');
+    await sendCommand('ATS0');
+    await sendCommand('ATSP0');
+    await sendCommand('0100', 6000);
+
+    buildHeader();
+    setStatus('Connected & initialized. Ready to log.', 'ok');
+    document.getElementById('startBtn').disabled = false;
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'err');
+    console.error(err);
+  }
+});
+
+async function runOneCycle() {
+  const row = {};
+  const time = new Date().toLocaleTimeString();
+  row['time'] = time;
+
+  for (const p of MODE01_REF) {
+    const cmd = '01' + p;
+    const raw = await sendFast(cmd);
+    row['01'+p] = extractData(cmd, raw);
+  }
+  for (const p of MODE21_PIDS) {
+    const cmd = '21' + p;
+    const raw = await sendFast(cmd);
+    row['21'+p] = extractData(cmd, raw);
+  }
+  return row;
+}
+
+function addLogRow(row) {
+  const tbody = document.getElementById('logBody');
+  const tr = document.createElement('tr');
+  let html = '<td>' + row['time'] + '</td>';
+  for (const p of MODE01_REF) html += '<td>' + (row['01'+p]||'') + '</td>';
+  for (const p of MODE21_PIDS) html += '<td>' + (row['21'+p]||'') + '</td>';
+  tr.innerHTML = html;
+  tbody.insertBefore(tr, tbody.firstChild);
+}
+
+async function loggingLoop() {
+  if (scanBusy) return;
+  scanBusy = true;
+  while (document.getElementById('stopBtn').disabled === false) {
+    cycleCount++;
+    document.getElementById('cycleInfo').textContent = 'Cycle ' + cycleCount + ' running...';
+    const row = await runOneCycle();
+    addLogRow(row);
+    document.getElementById('cycleInfo').textContent = 'Cycle ' + cycleCount + ' complete.';
+    const delay = parseInt(document.getElementById('cycleDelay').value, 10);
+    if (delay > 0) await new Promise(r => setTimeout(r, delay));
+  }
+  scanBusy = false;
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  setStatus('Logging all PIDs in rotation...', 'ok');
+  loggingLoop();
+});
+
+document.getElementById('stopBtn').addEventListener('click', () => {
+  document.getElementById('stopBtn').disabled = true;
+  document.getElementById('startBtn').disabled = false;
+  setStatus('Stopped. Connected, ready to resume.', 'info');
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  rxBuffer = '';
+  responseResolve = null;
+  scanBusy = false;
+  document.getElementById('stopBtn').disabled = true;
+  document.getElementById('startBtn').disabled = false;
+  setStatus('Reset. State cleared.', 'warn');
+});
+</script>
+</body>
+</html>
