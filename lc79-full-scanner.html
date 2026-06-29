@@ -98,6 +98,7 @@ function sendCommand(cmd, timeoutMs) {
   timeoutMs = timeoutMs || 6000;
   return new Promise(async (resolve, reject) => {
     try {
+      rxBuffer = ''; // clear any stale/leftover bytes before this send
       const encoder = new TextEncoder();
       const data = encoder.encode(cmd + '\r');
       responseResolve = resolve;
@@ -105,6 +106,7 @@ function sendCommand(cmd, timeoutMs) {
       setTimeout(() => {
         if (responseResolve) {
           responseResolve = null;
+          rxBuffer = ''; // also clear on timeout so next command starts clean
           reject(new Error('Timeout: ' + cmd));
         }
       }, timeoutMs);
@@ -112,6 +114,17 @@ function sendCommand(cmd, timeoutMs) {
       reject(err);
     }
   });
+}
+
+// Fast, single-attempt sender for brute-force scanning - no retry,
+// short timeout, since a missed PID just gets skipped (not fatal).
+async function sendFast(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 2500;
+  try {
+    return await sendCommand(cmd, timeoutMs);
+  } catch (err) {
+    return 'TIMEOUT';
+  }
 }
 
 // Sends a command, retries once on timeout, returns raw string or 'TIMEOUT'/'NO DATA'
@@ -326,12 +339,14 @@ document.getElementById('bruteBtn').addEventListener('click', async () => {
   const start = 0x00, end = 0x3C;
   const total = end - start + 1;
   let found = 0;
+  const scanStart = Date.now();
 
   for (let i = start; i <= end; i++) {
     const pidHex = i.toString(16).toUpperCase().padStart(2, '0');
     const cmd = '21' + pidHex;
-    showProgress(i - start + 1, total, 'Probing ' + cmd + ' (' + (i-start+1) + '/' + total + ')');
-    const raw = await sendWithRetry(cmd, 4000);
+    const elapsed = ((Date.now() - scanStart) / 1000).toFixed(0);
+    showProgress(i - start + 1, total, cmd + ' | ' + (i-start+1) + '/' + total + ' | ' + elapsed + 's elapsed | found ' + found);
+    const raw = await sendFast(cmd, 2500);
     const hex = cleanHex(raw);
     const respCode = '61' + pidHex;
     if (hex.includes(respCode) && !hex.includes('7F21')) {
@@ -339,11 +354,10 @@ document.getElementById('bruteBtn').addEventListener('click', async () => {
       addRow('bruteTable', cmd, undefined, hex, undefined);
       allResults.push({ section: 'brute21', cmd, raw, hex });
     }
-    // tiny gap so we don't hammer the bus / BLE link too hard
-    await new Promise(r => setTimeout(r, 150));
   }
   showProgress(1,1,'');
-  setStatus('Brute-force complete. ' + found + ' of ' + total + ' PIDs responded.', 'ok');
+  const totalTime = ((Date.now() - scanStart)/1000).toFixed(0);
+  setStatus('Brute-force complete in ' + totalTime + 's. ' + found + ' of ' + total + ' PIDs responded.', 'ok');
   document.getElementById('bruteBtn').disabled = false;
   document.getElementById('exportBtn').disabled = false;
 });
