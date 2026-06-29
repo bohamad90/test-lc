@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>LC79 Full OBD2 Scanner</title>
+<style>
+  body { font-family: -apple-system, monospace; background: #0d0d0d; color: #0f0; padding: 14px; font-size: 13px; }
+  h2 { font-size: 18px; margin-bottom: 4px; }
+  h3 { color: #ff0; margin-top: 24px; border-top: 1px solid #333; padding-top: 12px; }
+  button { font-size: 15px; padding: 10px 14px; margin: 3px 3px 12px 0; background: #1e1e1e; color: #0f0; border: 1px solid #0f0; border-radius: 8px; }
+  button:disabled { opacity: 0.35; }
+  button.danger { color: #f80; border-color: #f80; }
+  #status { padding: 8px; background: #1a1a1a; border-radius: 6px; margin-bottom: 10px; }
+  .err { color: #f55; }
+  .info { color: #aaa; }
+  .ok { color: #5f5; }
+  .warn { color: #fa0; }
+  table { width: 100%; font-size: 11px; border-collapse: collapse; margin-top: 8px; }
+  td, th { padding: 4px 5px; border-bottom: 1px solid #2a2a2a; text-align: left; vertical-align: top; }
+  th { color: #888; position: sticky; top: 0; background: #0d0d0d; }
+  .raw { color: #666; font-size: 10px; word-break: break-all; }
+  .pidcol { color: #0ff; font-weight: bold; white-space: nowrap; }
+  .scrollbox { max-height: 320px; overflow-y: auto; border: 1px solid #2a2a2a; border-radius: 6px; }
+  progress { width: 100%; height: 20px; }
+</style>
+</head>
+<body>
+
+<h2>LC79 Full OBD2 Scanner</h2>
+<div id="status" class="info">Not connected</div>
+
+<button id="connectBtn">1. Connect &amp; Init</button>
+<button id="mode01Btn" disabled>2. Scan Mode 01 (standard PIDs)</button>
+<button id="knownBtn" disabled>3. Test Known Toyota PIDs</button>
+<button id="bruteBtn" disabled>4. Brute-Force 2100-213C</button>
+<button id="exportBtn" disabled class="danger">Export All Results as Text</button>
+
+<div id="progressWrap" style="display:none">
+  <progress id="progressBar" value="0" max="100"></progress>
+  <div id="progressLabel" class="info"></div>
+</div>
+
+<h3>Mode 01 - Standard PIDs Supported</h3>
+<div class="scrollbox">
+<table id="mode01Table">
+  <thead><tr><th>PID</th><th>Name</th><th>Raw</th><th>Decoded</th></tr></thead>
+  <tbody></tbody>
+</table>
+</div>
+
+<h3>Known Toyota Mode 21 PIDs</h3>
+<div class="scrollbox">
+<table id="knownTable">
+  <thead><tr><th>PID</th><th>Name</th><th>Raw</th><th>Decoded</th></tr></thead>
+  <tbody></tbody>
+</table>
+</div>
+
+<h3>Brute-Force 2100-213C (raw, unidentified)</h3>
+<div class="scrollbox">
+<table id="bruteTable">
+  <thead><tr><th>PID</th><th>Raw Response</th></tr></thead>
+  <tbody></tbody>
+</table>
+</div>
+
+<script>
+const FFF0_SERVICE = '0000fff0-0000-1000-8000-00805f9b34fb';
+const FFF1_NOTIFY   = '0000fff1-0000-1000-8000-00805f9b34fb';
+const FFF2_WRITE     = '0000fff2-0000-1000-8000-00805f9b34fb';
+
+let device, server, writeChar, notifyChar;
+let rxBuffer = '';
+let responseResolve = null;
+let allResults = [];
+
+const setStatus = (msg, cls) => {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls || 'info';
+};
+
+function handleNotify(event) {
+  const value = event.target.value;
+  const decoder = new TextDecoder('ascii');
+  rxBuffer += decoder.decode(value);
+  if (rxBuffer.includes('>')) {
+    const fullResponse = rxBuffer;
+    rxBuffer = '';
+    if (responseResolve) {
+      responseResolve(fullResponse);
+      responseResolve = null;
+    }
+  }
+}
+
+function sendCommand(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 6000;
+  return new Promise(async (resolve, reject) => {
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(cmd + '\r');
+      responseResolve = resolve;
+      await writeChar.writeValue(data);
+      setTimeout(() => {
+        if (responseResolve) {
+          responseResolve = null;
+          reject(new Error('Timeout: ' + cmd));
+        }
+      }, timeoutMs);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+// Sends a command, retries once on timeout, returns raw string or 'TIMEOUT'/'NO DATA'
+async function sendWithRetry(cmd, timeoutMs) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const resp = await sendCommand(cmd, timeoutMs);
+      return resp;
+    } catch (err) {
+      if (attempt === 1) return 'TIMEOUT';
+    }
+  }
+}
+
+function cleanHex(raw) {
+  return raw.replace(/SEARCHING\.\.\.\r?/g, '')
+            .replace(/[^0-9A-Fa-f]/g, '')
+            .toUpperCase();
+}
+
+// ---------- CONNECT ----------
+document.getElementById('connectBtn').addEventListener('click', async () => {
+  try {
+    setStatus('Requesting device...', 'info');
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [FFF0_SERVICE]
+    });
+    setStatus('Connecting...', 'info');
+    server = await device.gatt.connect();
+    const service = await server.getPrimaryService(FFF0_SERVICE);
+    writeChar = await service.getCharacteristic(FFF2_WRITE);
+    notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
+
+    setStatus('Running init...', 'info');
+    await sendCommand('ATZ', 3000);
+    await new Promise(r => setTimeout(r, 1000));
+    await sendCommand('ATE0');
+    await sendCommand('ATL0');
+    await sendCommand('ATH1');
+    await sendCommand('ATS0');
+    await sendCommand('ATSP0');
+    // Force a PID request so the protocol actually locks before we scan
+    await sendCommand('0100', 8000);
+
+    setStatus('Connected & initialized. Ready to scan.', 'ok');
+    document.getElementById('mode01Btn').disabled = false;
+    document.getElementById('knownBtn').disabled = false;
+    document.getElementById('bruteBtn').disabled = false;
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'err');
+    console.error(err);
+  }
+});
+
+// ---------- MODE 01 STANDARD PID DEFINITIONS ----------
+const MODE01_PIDS = [
+  { pid: '04', name: 'Engine Load %', decode: b => (parseInt(b[0],16)/255*100).toFixed(1) + '%' },
+  { pid: '05', name: 'Coolant Temp', decode: b => (parseInt(b[0],16)-40) + ' C' },
+  { pid: '06', name: 'Short Fuel Trim B1', decode: b => ((parseInt(b[0],16)-128)/128*100).toFixed(1) + '%' },
+  { pid: '07', name: 'Long Fuel Trim B1', decode: b => ((parseInt(b[0],16)-128)/128*100).toFixed(1) + '%' },
+  { pid: '08', name: 'Short Fuel Trim B2', decode: b => ((parseInt(b[0],16)-128)/128*100).toFixed(1) + '%' },
+  { pid: '09', name: 'Long Fuel Trim B2', decode: b => ((parseInt(b[0],16)-128)/128*100).toFixed(1) + '%' },
+  { pid: '0A', name: 'Fuel Pressure', decode: b => (parseInt(b[0],16)*3) + ' kPa' },
+  { pid: '0B', name: 'Intake Manifold Pressure', decode: b => parseInt(b[0],16) + ' kPa' },
+  { pid: '0C', name: 'Engine RPM', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))/4).toFixed(0) + ' rpm' },
+  { pid: '0D', name: 'Vehicle Speed', decode: b => parseInt(b[0],16) + ' km/h' },
+  { pid: '0E', name: 'Timing Advance', decode: b => ((parseInt(b[0],16)/2)-64).toFixed(1) + ' deg' },
+  { pid: '0F', name: 'Intake Air Temp', decode: b => (parseInt(b[0],16)-40) + ' C' },
+  { pid: '10', name: 'MAF Air Flow', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))/100).toFixed(2) + ' g/s' },
+  { pid: '11', name: 'Throttle Position', decode: b => (parseInt(b[0],16)/255*100).toFixed(1) + '%' },
+  { pid: '1F', name: 'Run Time Since Start', decode: b => ((parseInt(b[0],16)*256)+parseInt(b[1],16)) + ' s' },
+  { pid: '21', name: 'Distance with MIL on', decode: b => ((parseInt(b[0],16)*256)+parseInt(b[1],16)) + ' km' },
+  { pid: '23', name: 'Fuel Rail Pressure', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))*10) + ' kPa' },
+  { pid: '2F', name: 'Fuel Level', decode: b => (parseInt(b[0],16)/255*100).toFixed(1) + '%' },
+  { pid: '33', name: 'Barometric Pressure', decode: b => parseInt(b[0],16) + ' kPa' },
+  { pid: '42', name: 'Control Module Voltage', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))/1000).toFixed(2) + ' V' },
+  { pid: '43', name: 'Absolute Load Value', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))/255*100).toFixed(1) + '%' },
+  { pid: '46', name: 'Ambient Air Temp', decode: b => (parseInt(b[0],16)-40) + ' C' },
+  { pid: '49', name: 'Accelerator Pedal Pos D', decode: b => (parseInt(b[0],16)/255*100).toFixed(1) + '%' },
+  { pid: '5C', name: 'Engine Oil Temp', decode: b => (parseInt(b[0],16)-40) + ' C' },
+  { pid: '5E', name: 'Fuel Rate', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))/20).toFixed(2) + ' L/h' },
+];
+
+function addRow(tableId, pid, name, raw, decoded) {
+  const tbody = document.querySelector('#' + tableId + ' tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<td class="pidcol">' + pid + '</td>' +
+                 (name !== undefined ? '<td>' + name + '</td>' : '') +
+                 '<td class="raw">' + raw + '</td>' +
+                 (decoded !== undefined ? '<td class="ok">' + decoded + '</td>' : '');
+  tbody.appendChild(tr);
+}
+
+function showProgress(current, total, label) {
+  const wrap = document.getElementById('progressWrap');
+  wrap.style.display = current < total ? 'block' : 'none';
+  document.getElementById('progressBar').value = (current/total)*100;
+  document.getElementById('progressLabel').textContent = label;
+}
+
+// ---------- MODE 01 SCAN ----------
+document.getElementById('mode01Btn').addEventListener('click', async () => {
+  document.getElementById('mode01Btn').disabled = true;
+  setStatus('Scanning Mode 01 support bitmask...', 'info');
+  document.querySelector('#mode01Table tbody').innerHTML = '';
+
+  // Query support bitmasks 0100, 0120, 0140, 0160 etc.
+  let supportedPids = new Set();
+  const bitmaskQueries = ['0100', '0120', '0140', '0160', '0180'];
+  for (const q of bitmaskQueries) {
+    const raw = await sendWithRetry(q, 5000);
+    const hex = cleanHex(raw);
+    const idx = hex.indexOf('41' + q.substring(2));
+    if (idx === -1) break; // not supported / chain ends
+    const dataHex = hex.substring(idx+4, idx+4+8);
+    if (dataHex.length < 8) break;
+    const base = parseInt(q.substring(2), 16);
+    const bits = parseInt(dataHex, 16);
+    for (let i = 0; i < 32; i++) {
+      if (bits & (1 << (31 - i))) {
+        const pidNum = base + i + 1;
+        supportedPids.add(pidNum.toString(16).toUpperCase().padStart(2, '0'));
+      }
+    }
+    allResults.push({ section: 'mode01_bitmask', cmd: q, raw });
+  }
+
+  setStatus('Found ' + supportedPids.size + ' supported PIDs. Reading values...', 'info');
+
+  let i = 0;
+  for (const def of MODE01_PIDS) {
+    i++;
+    showProgress(i, MODE01_PIDS.length, 'Reading 01' + def.pid + ' (' + def.name + ')');
+    if (!supportedPids.has(def.pid)) continue;
+    const raw = await sendWithRetry('01' + def.pid, 5000);
+    const hex = cleanHex(raw);
+    const idx = hex.indexOf('41' + def.pid);
+    let decoded = 'parse fail';
+    if (idx !== -1) {
+      const dataHex = hex.substring(idx+4);
+      const bytes = [];
+      for (let j = 0; j < dataHex.length; j += 2) bytes.push(dataHex.substr(j,2));
+      try { decoded = def.decode(bytes); } catch(e) { decoded = 'calc error'; }
+    } else if (raw === 'TIMEOUT') {
+      decoded = 'TIMEOUT';
+    } else {
+      decoded = 'no match';
+    }
+    addRow('mode01Table', '01' + def.pid, def.name, hex || raw, decoded);
+    allResults.push({ section: 'mode01', cmd: '01'+def.pid, name: def.name, raw, decoded });
+  }
+  showProgress(1,1,'');
+  setStatus('Mode 01 scan complete.', 'ok');
+  document.getElementById('mode01Btn').disabled = false;
+  document.getElementById('exportBtn').disabled = false;
+});
+
+// ---------- KNOWN TOYOTA MODE 21 PIDS ----------
+const KNOWN_PIDS = [
+  { pid: '2182', name: 'Trans Pan/Converter Temp', decode: hex => {
+      const A=parseInt(hex.substr(0,2),16), B=parseInt(hex.substr(2,2),16), C=parseInt(hex.substr(4,2),16), D=parseInt(hex.substr(6,2),16);
+      const panF = (((A*256+B)*7/100)-400)/10, convF = (((C*256+D)*7/100)-400)/10;
+      const panC = (panF-32)*5/9, convC = (convF-32)*5/9;
+      return 'Pan ' + panC.toFixed(1) + 'C / Conv ' + convC.toFixed(1) + 'C';
+  }},
+  { pid: '21D9', name: 'Trans Temp (alt/older format)', decode: hex => {
+      const E=parseInt(hex.substr(0,2),16), F=parseInt(hex.substr(2,2),16), G=parseInt(hex.substr(4,2),16), H=parseInt(hex.substr(6,2),16);
+      const panF = (((E*256+F)*7/100)-400)/10, outF = (((G*256+H)*7/100)-400)/10;
+      const panC = (panF-32)*5/9, outC = (outF-32)*5/9;
+      return 'Pan ' + panC.toFixed(1) + 'C / Outlet ' + outC.toFixed(1) + 'C';
+  }},
+  { pid: '21B2', name: 'Knock Correction Learn / Feedback', decode: hex => {
+      const A=parseInt(hex.substr(0,2),16), B=parseInt(hex.substr(2,2),16), D=parseInt(hex.substr(6,2),16);
+      const kclv = (A*256+B)/32 - 64;
+      const kfv = (D-256)/32;
+      return 'KCLV ' + kclv.toFixed(2) + ' / KFV ' + kfv.toFixed(2);
+  }},
+];
+
+document.getElementById('knownBtn').addEventListener('click', async () => {
+  document.getElementById('knownBtn').disabled = true;
+  setStatus('Testing known Toyota Mode 21 PIDs...', 'info');
+  document.querySelector('#knownTable tbody').innerHTML = '';
+
+  for (const def of KNOWN_PIDS) {
+    const raw = await sendWithRetry(def.pid, 6000);
+    const hex = cleanHex(raw);
+    const respCode = '61' + def.pid.substring(2);
+    const idx = hex.indexOf(respCode);
+    let decoded = 'no response / unsupported';
+    if (idx !== -1) {
+      const dataHex = hex.substring(idx+4);
+      try { decoded = def.decode(dataHex); } catch(e) { decoded = 'calc error: ' + dataHex; }
+    } else if (raw === 'TIMEOUT') {
+      decoded = 'TIMEOUT';
+    }
+    addRow('knownTable', def.pid, def.name, hex || raw, decoded);
+    allResults.push({ section: 'known21', cmd: def.pid, name: def.name, raw, decoded });
+  }
+  setStatus('Known PID test complete.', 'ok');
+  document.getElementById('knownBtn').disabled = false;
+  document.getElementById('exportBtn').disabled = false;
+});
+
+// ---------- BRUTE FORCE 2100-213C ----------
+document.getElementById('bruteBtn').addEventListener('click', async () => {
+  document.getElementById('bruteBtn').disabled = true;
+  document.querySelector('#bruteTable tbody').innerHTML = '';
+  const start = 0x00, end = 0x3C;
+  const total = end - start + 1;
+  let found = 0;
+
+  for (let i = start; i <= end; i++) {
+    const pidHex = i.toString(16).toUpperCase().padStart(2, '0');
+    const cmd = '21' + pidHex;
+    showProgress(i - start + 1, total, 'Probing ' + cmd + ' (' + (i-start+1) + '/' + total + ')');
+    const raw = await sendWithRetry(cmd, 4000);
+    const hex = cleanHex(raw);
+    const respCode = '61' + pidHex;
+    if (hex.includes(respCode) && !hex.includes('7F21')) {
+      found++;
+      addRow('bruteTable', cmd, undefined, hex, undefined);
+      allResults.push({ section: 'brute21', cmd, raw, hex });
+    }
+    // tiny gap so we don't hammer the bus / BLE link too hard
+    await new Promise(r => setTimeout(r, 150));
+  }
+  showProgress(1,1,'');
+  setStatus('Brute-force complete. ' + found + ' of ' + total + ' PIDs responded.', 'ok');
+  document.getElementById('bruteBtn').disabled = false;
+  document.getElementById('exportBtn').disabled = false;
+});
+
+// ---------- EXPORT ----------
+document.getElementById('exportBtn').addEventListener('click', () => {
+  let text = '=== LC79 OBD2 Scan Results ===\n';
+  text += 'Generated: ' + new Date().toString() + '\n\n';
+  for (const r of allResults) {
+    text += '[' + r.section + '] ' + r.cmd;
+    if (r.name) text += ' (' + r.name + ')';
+    text += '\n  raw: ' + (r.raw || r.hex) + '\n';
+    if (r.decoded) text += '  decoded: ' + r.decoded + '\n';
+    text += '\n';
+  }
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'lc79_obd2_scan_' + Date.now() + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+});
+</script>
+</body>
+</html>
