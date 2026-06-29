@@ -40,6 +40,7 @@
   <option value="3000">3s</option>
 </select>
 <div id="cycleInfo" class="info"></div>
+<div id="liveDebug" class="warn" style="font-size:11px;margin-top:4px"></div>
 
 <div class="scrollbox">
 <table id="logTable">
@@ -69,7 +70,10 @@ const setStatus = (msg, cls) => {
 function handleNotify(event) {
   const value = event.target.value;
   const decoder = new TextDecoder('ascii');
-  rxBuffer += decoder.decode(value);
+  const chunk = decoder.decode(value);
+  rxBuffer += chunk;
+  const dbg = document.getElementById('liveDebug');
+  if (dbg) dbg.textContent = 'last RX: ' + JSON.stringify(chunk) + ' | buffer len: ' + rxBuffer.length;
   if (rxBuffer.includes('>')) {
     const fullResponse = rxBuffer;
     rxBuffer = '';
@@ -186,6 +190,21 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
   }
 });
 
+// Outer watchdog: races sendFast against a hard timeout so even an
+// unexpected internal hang can't freeze the whole logging loop forever.
+// If the watchdog fires first, we forcibly clear shared state so a late
+// straggling resolution from the abandoned call can't corrupt the next request.
+function withWatchdog(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise(resolve => setTimeout(() => {
+      responseResolve = null;
+      rxBuffer = '';
+      resolve('WATCHDOG_TIMEOUT');
+    }, ms))
+  ]);
+}
+
 async function runOneCycle() {
   const row = {};
   const time = new Date().toLocaleTimeString();
@@ -193,12 +212,14 @@ async function runOneCycle() {
 
   for (const p of MODE01_REF) {
     const cmd = '01' + p;
-    const raw = await sendFast(cmd);
+    document.getElementById('cycleInfo').textContent = 'Cycle ' + cycleCount + ' | requesting ' + cmd + '...';
+    const raw = await withWatchdog(sendFast(cmd), 6000);
     row['01'+p] = extractData(cmd, raw);
   }
   for (const p of MODE21_PIDS) {
     const cmd = '21' + p;
-    const raw = await sendFast(cmd);
+    document.getElementById('cycleInfo').textContent = 'Cycle ' + cycleCount + ' | requesting ' + cmd + '...';
+    const raw = await withWatchdog(sendFast(cmd), 6000);
     row['21'+p] = extractData(cmd, raw);
   }
   return row;
