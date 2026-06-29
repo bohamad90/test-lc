@@ -33,6 +33,7 @@
 <button id="mode01Btn" disabled>2. Scan Mode 01 (standard PIDs)</button>
 <button id="knownBtn" disabled>3. Test Known Toyota PIDs</button>
 <button id="bruteBtn" disabled>4. Brute-Force 2100-213C</button>
+<button id="resetBtn" class="danger">Force Reset (if stuck)</button>
 <button id="exportBtn" disabled class="danger">Export All Results as Text</button>
 
 <div id="progressWrap" style="display:none">
@@ -74,6 +75,14 @@ let device, server, writeChar, notifyChar;
 let rxBuffer = '';
 let responseResolve = null;
 let allResults = [];
+let scanBusy = false; // global lock - prevents concurrent scans from racing on responseResolve
+
+function lockButtons(lock) {
+  scanBusy = lock;
+  document.getElementById('mode01Btn').disabled = lock;
+  document.getElementById('knownBtn').disabled = lock;
+  document.getElementById('bruteBtn').disabled = lock;
+}
 
 const setStatus = (msg, cls) => {
   const el = document.getElementById('status');
@@ -240,7 +249,8 @@ function showProgress(current, total, label) {
 
 // ---------- MODE 01 SCAN ----------
 document.getElementById('mode01Btn').addEventListener('click', async () => {
-  document.getElementById('mode01Btn').disabled = true;
+  if (scanBusy) return;
+  lockButtons(true);
   setStatus('Scanning Mode 01 support bitmask...', 'info');
   document.querySelector('#mode01Table tbody').innerHTML = '';
 
@@ -291,7 +301,7 @@ document.getElementById('mode01Btn').addEventListener('click', async () => {
   }
   showProgress(1,1,'');
   setStatus('Mode 01 scan complete.', 'ok');
-  document.getElementById('mode01Btn').disabled = false;
+  lockButtons(false);
   document.getElementById('exportBtn').disabled = false;
 });
 
@@ -318,7 +328,8 @@ const KNOWN_PIDS = [
 ];
 
 document.getElementById('knownBtn').addEventListener('click', async () => {
-  document.getElementById('knownBtn').disabled = true;
+  if (scanBusy) return;
+  lockButtons(true);
   setStatus('Testing known Toyota Mode 21 PIDs...', 'info');
   document.querySelector('#knownTable tbody').innerHTML = '';
 
@@ -338,14 +349,15 @@ document.getElementById('knownBtn').addEventListener('click', async () => {
     allResults.push({ section: 'known21', cmd: def.pid, name: def.name, raw, decoded });
   }
   setStatus('Known PID test complete.', 'ok');
-  document.getElementById('knownBtn').disabled = false;
+  lockButtons(false);
   document.getElementById('exportBtn').disabled = false;
 });
 
 // ---------- BRUTE FORCE 2100-213C ----------
 document.getElementById('bruteBtn').addEventListener('click', async () => {
+  if (scanBusy) return;
   window.__debugLive = true;
-  document.getElementById('bruteBtn').disabled = true;
+  lockButtons(true);
   document.querySelector('#bruteTable tbody').innerHTML = '';
   const start = 0x00, end = 0x3C;
   const total = end - start + 1;
@@ -370,8 +382,18 @@ document.getElementById('bruteBtn').addEventListener('click', async () => {
   showProgress(1,1,'');
   const totalTime = ((Date.now() - scanStart)/1000).toFixed(0);
   setStatus('Brute-force complete in ' + totalTime + 's. ' + found + ' of ' + total + ' PIDs responded.', 'ok');
-  document.getElementById('bruteBtn').disabled = false;
+  lockButtons(false);
   document.getElementById('exportBtn').disabled = false;
+});
+
+// ---------- FORCE RESET ----------
+document.getElementById('resetBtn').addEventListener('click', () => {
+  rxBuffer = '';
+  responseResolve = null;
+  window.__debugLive = false;
+  lockButtons(false);
+  showProgress(1,1,'');
+  setStatus('Reset. State cleared - ready to scan again.', 'warn');
 });
 
 // ---------- EXPORT ----------
