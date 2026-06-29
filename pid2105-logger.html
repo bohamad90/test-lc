@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>2105 Temp Candidate - Drive Logger</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #111; color: #0f0; padding: 16px; font-size: 14px; }
+  button { font-size: 18px; padding: 12px 20px; margin: 4px 4px 16px 0; background: #222; color: #0f0; border: 1px solid #0f0; border-radius: 8px; }
+  button:disabled { opacity: 0.4; }
+  .big { font-size: 38px; font-weight: bold; text-align: center; margin: 8px 0; }
+  .label { font-size: 13px; color: #888; text-align: center; }
+  .row { display: flex; justify-content: space-around; margin-bottom: 16px; }
+  .box { background: #1a1a1a; border: 1px solid #333; border-radius: 10px; padding: 10px; flex: 1; margin: 0 4px; text-align: center; }
+  .err { color: #f55; }
+  .info { color: #aaa; font-size: 12px; }
+  .ok { color: #5f5; }
+  .warn { color: #fa0; font-size: 11px; }
+  table { width: 100%; font-size: 11px; border-collapse: collapse; margin-top: 12px; }
+  td, th { padding: 4px 5px; border-bottom: 1px solid #333; text-align: left; }
+  #log { max-height: 360px; overflow-y: auto; }
+</style>
+</head>
+<body>
+<h2>PID 2105 Temp Candidate - Drive Logger</h2>
+<div id="status" class="info">Not connected</div>
+<button id="connectBtn">1. Connect &amp; Init</button>
+<button id="startBtn" disabled>2. Start Logging</button>
+<button id="stopBtn" disabled>Stop</button>
+<button id="resetBtn" style="color:#f80;border-color:#f80">Force Reset</button>
+
+<div class="row">
+  <div class="box">
+    <div class="big" id="temp2105">--</div>
+    <div class="label">2105 (raw/64-40) °C</div>
+  </div>
+  <div class="box">
+    <div class="big" id="coolantTemp">--</div>
+    <div class="label">Coolant (0105) °C</div>
+  </div>
+  <div class="box">
+    <div class="big" id="readCount">0</div>
+    <div class="label">READINGS</div>
+  </div>
+</div>
+<div id="liveDebug" class="warn"></div>
+
+<table id="log">
+  <thead><tr><th>Time</th><th>2105 raw</th><th>2105 °C</th><th>Coolant °C</th><th>RPM</th><th>Speed</th></tr></thead>
+  <tbody id="logBody"></tbody>
+</table>
+
+<script>
+const FFF0_SERVICE = '0000fff0-0000-1000-8000-00805f9b34fb';
+const FFF1_NOTIFY   = '0000fff1-0000-1000-8000-00805f9b34fb';
+const FFF2_WRITE     = '0000fff2-0000-1000-8000-00805f9b34fb';
+
+let device, server, writeChar, notifyChar;
+let rxBuffer = '';
+let responseResolve = null;
+let pollTimer = null;
+let readCount = 0;
+let pollInFlight = false;
+
+const setStatus = (msg, cls) => {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls || 'info';
+};
+
+function handleNotify(event) {
+  const value = event.target.value;
+  const decoder = new TextDecoder('ascii');
+  const chunk = decoder.decode(value);
+  rxBuffer += chunk;
+  const dbg = document.getElementById('liveDebug');
+  if (dbg) dbg.textContent = 'last RX: ' + JSON.stringify(chunk);
+  if (rxBuffer.includes('>')) {
+    const fullResponse = rxBuffer;
+    rxBuffer = '';
+    if (responseResolve) {
+      responseResolve(fullResponse);
+      responseResolve = null;
+    }
+  }
+}
+
+function sendCommand(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 5000;
+  return new Promise(async (resolve, reject) => {
+    try {
+      rxBuffer = '';
+      const encoder = new TextEncoder();
+      const data = encoder.encode(cmd + '\r');
+      responseResolve = resolve;
+      await writeChar.writeValue(data);
+      setTimeout(() => {
+        if (responseResolve) {
+          responseResolve = null;
+          rxBuffer = '';
+          reject(new Error('Timeout: ' + cmd));
+        }
+      }, timeoutMs);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+async function sendFast(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 5000;
+  try {
+    return await sendCommand(cmd, timeoutMs);
+  } catch (err) {
+    try {
+      const encoder = new TextEncoder();
+      await writeChar.writeValue(encoder.encode('\r'));
+    } catch (e2) {}
+    await new Promise(r => setTimeout(r, 400));
+    rxBuffer = '';
+    responseResolve = null;
+    return 'TIMEOUT';
+  }
+}
+
+function cleanHex(raw) {
+  return raw.replace(/SEARCHING\.\.\.\r?/g, '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+}
+
+document.getElementById('connectBtn').addEventListener('click', async () => {
+  try {
+    setStatus('Requesting device...', 'info');
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [FFF0_SERVICE]
+    });
+    setStatus('Connecting...', 'info');
+    server = await device.gatt.connect();
+    const service = await server.getPrimaryService(FFF0_SERVICE);
+    writeChar = await service.getCharacteristic(FFF2_WRITE);
+    notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
+
+    setStatus('Running init...', 'info');
+    await sendCommand('ATZ', 3000);
+    await new Promise(r => setTimeout(r, 1000));
+    await sendCommand('ATE0');
+    await sendCommand('ATL0');
+    await sendCommand('ATH1');
+    await sendCommand('ATS0');
+    await sendCommand('ATSP0');
+    await sendCommand('0100', 6000);
+
+    setStatus('Connected & initialized. Ready to log.', 'ok');
+    document.getElementById('startBtn').disabled = false;
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'err');
+    console.error(err);
+  }
+});
+
+function parse2105(raw) {
+  const hex = cleanHex(raw);
+  const idx = hex.indexOf('6105');
+  if (idx === -1) return null;
+  const dataHex = hex.substring(idx+4, idx+8);
+  if (dataHex.length < 4) return null;
+  const rawVal = parseInt(dataHex, 16);
+  const celsius = rawVal / 64 - 40;
+  return { rawVal, celsius };
+}
+
+function parseCoolant(raw) {
+  const hex = cleanHex(raw);
+  const idx = hex.indexOf('4105');
+  if (idx === -1) return null;
+  const dataHex = hex.substring(idx+4, idx+6);
+  if (dataHex.length < 2) return null;
+  return parseInt(dataHex, 16) - 40;
+}
+
+function parseRPM(raw) {
+  const hex = cleanHex(raw);
+  const idx = hex.indexOf('410C');
+  if (idx === -1) return null;
+  const dataHex = hex.substring(idx+4, idx+8);
+  if (dataHex.length < 4) return null;
+  return Math.round(parseInt(dataHex, 16) / 4);
+}
+
+function parseSpeed(raw) {
+  const hex = cleanHex(raw);
+  const idx = hex.indexOf('410D');
+  if (idx === -1) return null;
+  const dataHex = hex.substring(idx+4, idx+6);
+  if (dataHex.length < 2) return null;
+  return parseInt(dataHex, 16);
+}
+
+function addLogRow(time, r2105raw, r2105c, coolant, rpm, speed) {
+  const tbody = document.getElementById('logBody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<td>' + time + '</td><td>' + (r2105raw!==null?r2105raw:'--') +
+                 '</td><td>' + (r2105c!==null?r2105c.toFixed(1):'--') +
+                 '</td><td>' + (coolant!==null?coolant:'--') +
+                 '</td><td>' + (rpm!==null?rpm:'--') +
+                 '</td><td>' + (speed!==null?speed:'--') + '</td>';
+  tbody.insertBefore(tr, tbody.firstChild);
+}
+
+async function pollOnce() {
+  const time = new Date().toLocaleTimeString();
+  try {
+    const raw2105 = await sendFast('2105');
+    const p2105 = parse2105(raw2105);
+
+    const rawCoolant = await sendFast('0105');
+    const coolant = parseCoolant(rawCoolant);
+
+    const rawRPM = await sendFast('010C');
+    const rpm = parseRPM(rawRPM);
+
+    const rawSpeed = await sendFast('010D');
+    const speed = parseSpeed(rawSpeed);
+
+    readCount++;
+    document.getElementById('readCount').textContent = readCount;
+    if (p2105) {
+      document.getElementById('temp2105').textContent = p2105.celsius.toFixed(1);
+    }
+    if (coolant !== null) {
+      document.getElementById('coolantTemp').textContent = coolant;
+    }
+    addLogRow(time, p2105 ? p2105.rawVal : null, p2105 ? p2105.celsius : null, coolant, rpm, speed);
+  } catch (err) {
+    addLogRow(time, null, null, null, null, null);
+  }
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  setStatus('Logging every ~3s...', 'ok');
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  pollOnce();
+  pollTimer = setInterval(async () => {
+    if (pollInFlight) return;
+    pollInFlight = true;
+    await pollOnce();
+    pollInFlight = false;
+  }, 3000);
+});
+
+document.getElementById('stopBtn').addEventListener('click', () => {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+  setStatus('Stopped. Connected, ready to resume.', 'info');
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+  pollInFlight = false;
+  rxBuffer = '';
+  responseResolve = null;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+  setStatus('Reset. State cleared.', 'warn');
+});
+</script>
+</body>
+</html>
