@@ -447,8 +447,14 @@ function withWatchdog(promiseFactory, ms) {
     }, ms))
   ]);
 }
+let lastActivityTime = Date.now();
 async function sendGuarded(cmd) {
+  const idleMs = Date.now() - lastActivityTime;
+  if (idleMs > 20000) {
+    await wakeLink();
+  }
   const result = await withWatchdog(() => sendFast(cmd), 7000);
+  lastActivityTime = Date.now();
   if (result !== 'WATCHDOG_TIMEOUT') consecutiveWatchdogFires = 0;
   return result;
 }
@@ -473,6 +479,21 @@ async function attemptReconnect() {
     setConn('Disconnected', 'err');
     setStatusLine('Reconnect failed: ' + err.message);
   }
+}
+
+// Sends a cheap, fast command to "wake up" the BLE link after idle time.
+// iOS can let the connection interval drift slower when idle, making the
+// FIRST real request after a pause take much longer than normal - this
+// absorbs that one-time lag before any time-sensitive PID sequence starts.
+async function wakeLink() {
+  setStatusLine('Waking link...');
+  try {
+    await sendCommand('ATI', 6000); // cheap, always-supported "print version" command
+  } catch (err) {
+    // even a failed wake attempt still nudges the connection interval - continue regardless
+  }
+  rxBuffer = '';
+  responseResolve = null;
 }
 
 function cleanHex(raw) {
@@ -545,11 +566,13 @@ async function readingsLoop() {
   }
 }
 
-document.getElementById('startBtn').addEventListener('click', () => {
+document.getElementById('startBtn').addEventListener('click', async () => {
   document.getElementById('startBtn').disabled = true;
   document.getElementById('stopBtn').disabled = false;
   document.getElementById('connectBtn').disabled = true;
+  document.getElementById('testBtn').disabled = true;
   setStatusLine('Live readings active...');
+  await wakeLink();
   readingsLoop();
 });
 
@@ -571,6 +594,8 @@ document.getElementById('testBtn').addEventListener('click', async () => {
   document.getElementById('testResults').innerHTML = '';
   document.getElementById('testSummary').textContent = 'Running...';
 
+  await wakeLink();
+
   const results = [];
   for (const g of GAUGES) {
     setStatusLine('Self-test: ' + g.pid + ' (' + g.name + ')...');
@@ -584,7 +609,7 @@ document.getElementById('testBtn').addEventListener('click', async () => {
       value = extractAndDecode(g, raw);
       status = value !== null ? 'OK' : 'NO-MATCH';
     }
-    results.push({ gauge: g, status, value, raw: hex });
+    results.push({ gauge: g, status, value, raw: (status === 'TIMEOUT' ? '(no response)' : hex) });
     if (status === 'OK') updateGauge(g, value);
   }
 
