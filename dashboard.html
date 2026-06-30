@@ -155,6 +155,10 @@
   .ch .nm{font-size:12px;font-weight:600;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .nm-input{width:100%;font-size:11.5px;font-weight:600;text-align:center;background:var(--soft2);border:1px solid var(--blue);border-radius:6px;color:var(--ink);padding:3px 5px;margin-top:6px;outline:none;}
   [data-theme="dark"] .nm-input{background:#111B27;}
+  #grid.editMode .ch{cursor:default;}
+  #grid.editMode .ch .icn{border:1px dashed var(--blue);background:var(--blue-soft);color:var(--blue);}
+  .edithint{font-size:11px;color:var(--blue);margin-bottom:12px;display:none;align-items:center;gap:6px;}
+  .edithint.show{display:flex;}
   .ch .chn{font-size:9px;color:var(--faint);margin-top:2px;letter-spacing:0.04em;font-family:var(--mono);}
   .ch .stt{font-size:9.5px;font-weight:700;letter-spacing:0.06em;color:var(--faint);margin-top:9px;}
   .ch.on{background:var(--blue-soft);border-color:var(--blue);}
@@ -333,6 +337,7 @@
         <button class="danger" id="allOff"><i data-lucide="power-off"></i>All off</button>
       </div>
     </div>
+    <div class="edithint" id="editHint"><i data-lucide="pencil"></i>Tap an icon to change it · type to rename</div>
     <div class="swgrid" id="grid"></div>
   </div>
   <details class="raw"><summary><i data-lucide="chevron-right"></i>Raw shunt data — map temperature / totals</summary>
@@ -368,7 +373,7 @@
 <script src="junctek-shunt-ble.js?v=6"></script>
 <script src="mictuning-ble.js?v=2"></script>
 <script>
-  var DASHBOARD_VERSION = 7;
+  var DASHBOARD_VERSION = 8;
   var CHANNEL_COUNT = 12, BATTERY_AH = 130, LOW_SOC = 20, LOW_VOLT = 11.5;
   var DEFAULT_KEY = '6cc611245a854a60cde278f036c5c98a';
   var DEF_CHANS = [['💡','Interior'],['🔆','Awning'],['🌀','Fan'],['🚰','Water pump'],['❄️','Fridge'],['🔌','Inverter'],['📡','Antenna'],['🛗','Slide-out'],['🔥','Heater'],['💡','Rock lights'],['🎺','Air horn'],['＋','Aux']];
@@ -601,7 +606,9 @@
   document.getElementById('editBtn').onclick=function(){
     if(editMode){var ins=document.querySelectorAll('#grid .nm-input');for(var k=0;k<ins.length;k++){var idx=+ins[k].getAttribute('data-i');chans[idx][1]=ins[k].value.trim()||DEF_CHANS[idx][1];}saveChans();}
     editMode=!editMode;this.innerHTML=editMode?'<i data-lucide="check"></i>Done':'<i data-lucide="pencil"></i>Edit';this.classList.toggle('active',editMode);renderIcons(this);
-    document.getElementById('grid').classList.toggle('editMode',editMode);draw();
+    document.getElementById('grid').classList.toggle('editMode',editMode);
+    var hint=document.getElementById('editHint');hint.classList.toggle('show',editMode);renderIcons(hint);
+    draw();
   };
 
   var grid=document.getElementById('grid');
@@ -611,13 +618,15 @@
     chans.forEach(function(c,i){
       var d=document.createElement('div');
       d.className='ch'+(c[2]?' on':'');
-      d.innerHTML='<div class="iconwrap"><div class="icn">'+renderIcon(c[0])+'</div><span class="editdot"><i data-lucide="pencil"></i></span></div>'+
+      d.innerHTML='<div class="iconwrap"><div class="icn">'+renderIcon(c[0])+'</div></div>'+
         (editMode?'<input class="nm-input" data-i="'+i+'" value="'+c[1].replace(/"/g,'&quot;')+'"/>':'<div class="nm">'+c[1]+'</div>')+
         '<div class="chn">CH '+(i+1)+'</div><div class="stt">'+(c[2]?'ON':'OFF')+'</div>';
-      if(!editMode)d.onclick=function(){toggleChannel(i);};
-      var op=function(e){e.stopPropagation();openPicker(i);};
-      d.querySelector('.icn').onclick=op;d.querySelector('.editdot').onclick=op;
-      if(editMode){var inp=d.querySelector('.nm-input');inp.onclick=function(e){e.stopPropagation();};(function(x){inp.oninput=function(){chans[x][1]=this.value;};})(i);}
+      if(editMode){
+        d.querySelector('.icn').onclick=function(){openPicker(i);};
+        var inp=d.querySelector('.nm-input');inp.onclick=function(e){e.stopPropagation();};(function(x){inp.oninput=function(){chans[x][1]=this.value;};})(i);
+      }else{
+        d.onclick=function(){toggleChannel(i);};
+      }
       grid.appendChild(d);
     });
     updateCount();renderIcons(grid);
