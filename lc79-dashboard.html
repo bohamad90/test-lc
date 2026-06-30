@@ -207,6 +207,7 @@
 </div>
 
 <div id="liveDebug"></div>
+<div id="reconnectLog" style="max-width:1040px; margin:0 auto 12px; font-size:10px; color:var(--danger);"></div>
 
 <div id="testPanel" style="display:none; max-width:1040px; margin:0 auto 24px; background:var(--bg-panel); border:1px solid var(--line); border-radius:8px; padding:14px;">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -460,8 +461,19 @@ async function sendGuarded(cmd) {
 }
 
 let reconnectAttempts = 0;
-async function attemptReconnect() {
+let reconnectLog = [];
+async function attemptReconnect(triggerInfo) {
   reconnectAttempts++;
+  reconnectLog.push({ time: new Date().toLocaleTimeString(), trigger: triggerInfo, attempt: reconnectAttempts });
+  const dbg = document.getElementById('liveDebug');
+  if (dbg) dbg.textContent = 'RECONNECT #' + reconnectAttempts + ' triggered by: ' + JSON.stringify(triggerInfo);
+  const logPanel = document.getElementById('reconnectLog');
+  if (logPanel) {
+    logPanel.innerHTML = reconnectLog.slice(-8).reverse().map(r =>
+      r.time + ' #' + r.attempt + ' - PID ' + (r.trigger ? r.trigger.pid : '?') +
+      ' (' + (r.trigger ? r.trigger.name : '?') + ') last raw: ' + (r.trigger ? JSON.stringify(r.trigger.raw) : '?')
+    ).join('<br>');
+  }
   if (reconnectAttempts > 5) {
     setConn('Disconnected', 'err');
     setStatusLine('Too many reconnect attempts - tap Force Reset and reconnect manually.');
@@ -587,9 +599,7 @@ async function readingsLoop() {
       if (!loggingActive) break;
       setStatusLine('Reading ' + g.pid + ' (' + g.name + ')...');
       const raw = await sendGuarded(g.pid);
-      if (consecutiveWatchdogFires >= 3) await attemptReconnect();
-      const value = extractAndDecode(g, raw);
-      updateGauge(g, value);
+      if (consecutiveWatchdogFires >= 3) await attemptReconnect({ source: 'readingsLoop', pid: g.pid, name: g.name, raw, watchdogFires: consecutiveWatchdogFires });
     }
   }
 }
@@ -628,7 +638,7 @@ document.getElementById('testBtn').addEventListener('click', async () => {
   for (const g of GAUGES) {
     setStatusLine('Self-test: ' + g.pid + ' (' + g.name + ')...');
     const raw = await sendGuarded(g.pid);
-    if (consecutiveWatchdogFires >= 3) await attemptReconnect();
+    if (consecutiveWatchdogFires >= 3) await attemptReconnect({ source: 'selfTest', pid: g.pid, name: g.name, raw, watchdogFires: consecutiveWatchdogFires });
     const hex = cleanHex(raw);
     let status, value;
     if (raw === 'TIMEOUT' || raw === 'WATCHDOG_TIMEOUT') {
