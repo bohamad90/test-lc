@@ -248,18 +248,67 @@ function extractData(cmd, raw) {
   return hex.substring(idx + 4) || '(empty)';
 }
 
+// Hard outer watchdog - races sendFast against an absolute deadline so a single
+// PID can never freeze the whole loop for more than ~7s, regardless of what's
+// happening inside sendFast's own retry/interrupt logic.
+let consecutiveWatchdogFires = 0;
+function withWatchdog(promiseFactory, ms) {
+  return Promise.race([
+    promiseFactory(),
+    new Promise(resolve => setTimeout(() => {
+      responseResolve = null;
+      rxBuffer = '';
+      consecutiveWatchdogFires++;
+      resolve('WATCHDOG_TIMEOUT');
+    }, ms))
+  ]);
+}
+
+async function sendGuarded(cmd) {
+  const result = await withWatchdog(() => sendFast(cmd), 7000);
+  if (result !== 'WATCHDOG_TIMEOUT') {
+    consecutiveWatchdogFires = 0;
+  }
+  return result;
+}
+
+// If the BLE link itself seems wedged (repeated watchdog fires in a row),
+// try a full disconnect + reconnect rather than continuing to hammer a dead link.
+async function attemptReconnect() {
+  setStatus('Link looks stuck - attempting reconnect...', 'warn');
+  try {
+    if (device && device.gatt && device.gatt.connected) {
+      device.gatt.disconnect();
+    }
+    await new Promise(r => setTimeout(r, 1500));
+    server = await device.gatt.connect();
+    const service = await server.getPrimaryService(FFF0_SERVICE);
+    writeChar = await service.getCharacteristic(FFF2_WRITE);
+    notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
+    await sendCommand('ATE0', 4000);
+    consecutiveWatchdogFires = 0;
+    setStatus('Reconnected. Resuming logging...', 'ok');
+  } catch (err) {
+    setStatus('Reconnect failed: ' + err.message + ' - tap Force Reset and reconnect manually.', 'err');
+  }
+}
+
 async function runOneCycle() {
   const row = {};
   row['time'] = new Date().toLocaleTimeString();
   for (const p of MODE01_REF) {
     const cmd = '01' + p;
     document.getElementById('cycleInfo').textContent = 'Cycle ' + cycleCount + ' | ' + cmd;
-    row['01'+p] = extractData(cmd, await sendFast(cmd));
+    row['01'+p] = extractData(cmd, await sendGuarded(cmd));
+    if (consecutiveWatchdogFires >= 3) { await attemptReconnect(); }
   }
   for (const p of MODE21_PIDS) {
     const cmd = '21' + p;
     document.getElementById('cycleInfo').textContent = 'Cycle ' + cycleCount + ' | ' + cmd;
-    row['21'+p] = extractData(cmd, await sendFast(cmd));
+    row['21'+p] = extractData(cmd, await sendGuarded(cmd));
+    if (consecutiveWatchdogFires >= 3) { await attemptReconnect(); }
   }
   return row;
 }
