@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LC79 // Diagnostic Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0D0C;
+    --bg-panel: #141715;
+    --bg-panel-raised: #181C19;
+    --ink: #F5F1E8;
+    --ink-dim: #8C9189;
+    --amber: #FF6A00;
+    --amber-dim: #7A3C12;
+    --confirmed: #3FA796;
+    --confirmed-dim: #1E4F47;
+    --muted: #5A5F5C;
+    --line: #232722;
+    --danger: #D14B3F;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    padding: 18px 14px 60px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .label-font {
+    font-family: 'Barlow Condensed', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* ===== HEADER ===== */
+  header {
+    max-width: 1040px;
+    margin: 0 auto 18px;
+  }
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .vehicle-id {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: clamp(26px, 5vw, 36px);
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+  .vehicle-id .accent { color: var(--amber); }
+  .vehicle-meta {
+    font-size: 10.5px;
+    color: var(--ink-dim);
+    letter-spacing: 0.04em;
+  }
+  .conn-status {
+    text-align: right;
+    font-size: 11px;
+  }
+  .conn-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    margin-right: 6px;
+  }
+  .conn-dot.live { background: var(--confirmed); box-shadow: 0 0 6px var(--confirmed); }
+  .conn-dot.err { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+
+  /* ===== CONTROLS ===== */
+  .controls {
+    max-width: 1040px;
+    margin: 0 auto 18px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  button {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 13px;
+    padding: 10px 16px;
+    background: var(--bg-panel);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  button.primary { border-color: var(--confirmed-dim); color: var(--confirmed); }
+  button.primary:disabled { opacity: 0.35; }
+  button:disabled { opacity: 0.35; }
+  button.danger { border-color: #5a2620; color: var(--danger); }
+  #statusLine {
+    font-size: 11px;
+    color: var(--ink-dim);
+    margin-left: 4px;
+    align-self: center;
+  }
+
+  /* ===== SECTION ===== */
+  .section { max-width: 1040px; margin: 0 auto 28px; }
+  .section-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .section-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--confirmed); box-shadow: 0 0 8px var(--confirmed); }
+  .section-dot.exp { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .section-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .section-sub { font-size: 10.5px; color: var(--ink-dim); margin-left: auto; }
+
+  /* ===== GAUGE GRID ===== */
+  .gauge-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+  }
+  .gauge-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .gauge-card.exp { border-color: var(--amber-dim); }
+  .gauge-pid { font-size: 9.5px; color: var(--ink-dim); letter-spacing: 0.08em; margin-bottom: 2px; }
+  .gauge-pid .code { color: var(--confirmed); }
+  .gauge-card.exp .gauge-pid .code { color: var(--amber); }
+  .gauge-name {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--ink);
+    margin-bottom: 10px;
+    min-height: 28px;
+  }
+  .gauge-reading { display: flex; align-items: baseline; gap: 5px; }
+  .gauge-value {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .gauge-value.stale { color: var(--muted); }
+  .gauge-unit { font-size: 12px; color: var(--ink-dim); }
+
+  /* ===== DEBUG / EXPORT ===== */
+  #liveDebug { font-size: 10px; color: var(--amber); max-width: 1040px; margin: 0 auto 10px; min-height: 14px; }
+  textarea {
+    width: 100%; max-width: 1040px; display: block; margin: 12px auto;
+    height: 160px; background: var(--bg-panel); color: var(--confirmed);
+    border: 1px solid var(--line); border-radius: 8px; font-family: monospace;
+    font-size: 10px; padding: 10px;
+  }
+
+  @media (max-width: 480px) {
+    .gauge-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div>
+      <div class="vehicle-id">LC79 <span class="accent">DIAG</span></div>
+      <div class="vehicle-meta">2024 LAND CRUISER 79 &middot; 1GR-FE V6 &middot; A/T 6-SPD &middot; VEEPEAK OBDCHECK BLE</div>
+    </div>
+    <div class="conn-status">
+      <div><span class="conn-dot" id="connDot"></span><span id="connText">Not connected</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="controls">
+  <button id="connectBtn" class="primary">Connect</button>
+  <button id="startBtn" class="primary" disabled>Start Live Readings</button>
+  <button id="stopBtn" disabled>Stop</button>
+  <button id="testBtn" class="primary" disabled>Run Self-Test</button>
+  <button id="resetBtn" class="danger">Force Reset</button>
+  <span id="statusLine"></span>
+</div>
+
+<div id="liveDebug"></div>
+
+<div id="testPanel" style="display:none; max-width:1040px; margin:0 auto 24px; background:var(--bg-panel); border:1px solid var(--line); border-radius:8px; padding:14px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+    <div class="label-font" style="font-size:13px; font-weight:600;">Self-Test Results</div>
+    <div id="testSummary" style="font-size:11px; color:var(--ink-dim);"></div>
+  </div>
+  <div id="testResults" style="font-size:11px; max-height:280px; overflow-y:auto;"></div>
+</div>
+
+<!-- ENGINE -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-dot"></div>
+    <div class="section-title">Engine</div>
+    <div class="section-sub label-font">MODE 01</div>
+  </div>
+  <div class="gauge-grid" id="grid-engine"></div>
+</div>
+
+<!-- TRANSMISSION -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-dot"></div>
+    <div class="section-title">Transmission</div>
+    <div class="section-sub label-font">MODE 21 &middot; CONFIRMED</div>
+  </div>
+  <div class="gauge-grid" id="grid-trans"></div>
+</div>
+
+<!-- EMISSIONS -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-dot"></div>
+    <div class="section-title">Emissions &amp; Fuel</div>
+    <div class="section-sub label-font">MODE 01</div>
+  </div>
+  <div class="gauge-grid" id="grid-emissions"></div>
+</div>
+
+<!-- THROTTLE / PEDAL -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-dot"></div>
+    <div class="section-title">Throttle &amp; Pedal</div>
+    <div class="section-sub label-font">MODE 01</div>
+  </div>
+  <div class="gauge-grid" id="grid-throttle"></div>
+</div>
+
+<!-- SYSTEM -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-dot"></div>
+    <div class="section-title">System</div>
+    <div class="section-sub label-font">MODE 01</div>
+  </div>
+  <div class="gauge-grid" id="grid-system"></div>
+</div>
+
+<!-- EXPERIMENTAL -->
+<div class="section">
+  <div class="section-head">
+    <div class="section-dot exp"></div>
+    <div class="section-title">Experimental</div>
+    <div class="section-sub label-font">UNCONFIRMED FORMULA</div>
+  </div>
+  <div class="gauge-grid" id="grid-experimental"></div>
+</div>
+
+<textarea id="exportBox" style="display:none"></textarea>
+
+<script>
+const FFF0_SERVICE = '0000fff0-0000-1000-8000-00805f9b34fb';
+const FFF1_NOTIFY   = '0000fff1-0000-1000-8000-00805f9b34fb';
+const FFF2_WRITE     = '0000fff2-0000-1000-8000-00805f9b34fb';
+
+let device, server, writeChar, notifyChar;
+let rxBuffer = '';
+let responseResolve = null;
+let loggingActive = false;
+let consecutiveWatchdogFires = 0;
+
+// ---------- GAUGE DEFINITIONS ----------
+// Each gauge: id, pid (full cmd e.g. '010C'), name, unit, decode(bytesHexAfterEcho), group, experimental
+const GAUGES = [
+  // ENGINE
+  { id:'rpm', pid:'010C', name:'Engine RPM', unit:'rpm', group:'engine',
+    decode: h => Math.round(parseInt(h.substr(0,4),16)/4) },
+  { id:'speed', pid:'010D', name:'Vehicle Speed', unit:'km/h', group:'engine',
+    decode: h => parseInt(h.substr(0,2),16) },
+  { id:'coolant', pid:'0105', name:'Coolant Temp', unit:'°C', group:'engine',
+    decode: h => parseInt(h.substr(0,2),16)-40 },
+  { id:'intake', pid:'010F', name:'Intake Air Temp', unit:'°C', group:'engine',
+    decode: h => parseInt(h.substr(0,2),16)-40 },
+  { id:'ambient', pid:'0146', name:'Ambient Air Temp', unit:'°C', group:'engine',
+    decode: h => parseInt(h.substr(0,2),16)-40 },
+  { id:'maf', pid:'0110', name:'MAF Air Flow', unit:'g/s', group:'engine',
+    decode: h => (parseInt(h.substr(0,4),16)/100).toFixed(2) },
+  { id:'load', pid:'0104', name:'Engine Load', unit:'%', group:'engine',
+    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
+  { id:'timing', pid:'010E', name:'Timing Advance', unit:'deg', group:'engine',
+    decode: h => ((parseInt(h.substr(0,2),16)/2)-64).toFixed(1) },
+  { id:'runtime', pid:'011F', name:'Run Time', unit:'s', group:'engine',
+    decode: h => parseInt(h.substr(0,4),16) },
+
+  // TRANSMISSION (Mode 21)
+  { id:'transpan', pid:'2182', name:'Trans Fluid - Pan', unit:'°C', group:'trans', mode21: true,
+    decode: h => {
+      const A=parseInt(h.substr(0,2),16), B=parseInt(h.substr(2,2),16);
+      const f = (((A*256+B)*7/100)-400)/10;
+      return ((f-32)*5/9).toFixed(1);
+    }},
+  { id:'transconv', pid:'2182', name:'Trans Fluid - Converter', unit:'°C', group:'trans', mode21: true,
+    decode: h => {
+      const C=parseInt(h.substr(4,2),16), D=parseInt(h.substr(6,2),16);
+      const f = (((C*256+D)*7/100)-400)/10;
+      return ((f-32)*5/9).toFixed(1);
+    }},
+
+  // EMISSIONS
+  { id:'cat_b1s1', pid:'013C', name:'Catalyst Temp B1S1', unit:'°C', group:'emissions',
+    decode: h => (parseInt(h.substr(0,4),16)/10 - 40).toFixed(1) },
+  { id:'cat_b2s1', pid:'013D', name:'Catalyst Temp B2S1', unit:'°C', group:'emissions',
+    decode: h => (parseInt(h.substr(0,4),16)/10 - 40).toFixed(1) },
+  { id:'cat_b1s2', pid:'013E', name:'Catalyst Temp B1S2', unit:'°C', group:'emissions',
+    decode: h => (parseInt(h.substr(0,4),16)/10 - 40).toFixed(1) },
+  { id:'cat_b2s2', pid:'013F', name:'Catalyst Temp B2S2', unit:'°C', group:'emissions',
+    decode: h => (parseInt(h.substr(0,4),16)/10 - 40).toFixed(1) },
+  { id:'stft1', pid:'0106', name:'Short Fuel Trim B1', unit:'%', group:'emissions',
+    decode: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1) },
+  { id:'ltft1', pid:'0107', name:'Long Fuel Trim B1', unit:'%', group:'emissions',
+    decode: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1) },
+  { id:'stft2', pid:'0108', name:'Short Fuel Trim B2', unit:'%', group:'emissions',
+    decode: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1) },
+  { id:'ltft2', pid:'0109', name:'Long Fuel Trim B2', unit:'%', group:'emissions',
+    decode: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1) },
+  { id:'fuelair', pid:'0144', name:'Fuel/Air Equiv Ratio', unit:'', group:'emissions',
+    decode: h => (parseInt(h.substr(0,4),16)/32768).toFixed(2) },
+
+  // THROTTLE / PEDAL
+  { id:'throttle', pid:'0111', name:'Throttle Position', unit:'%', group:'throttle',
+    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
+  { id:'relthrottle', pid:'0145', name:'Relative Throttle', unit:'%', group:'throttle',
+    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
+  { id:'throttleb', pid:'0147', name:'Throttle Position B', unit:'%', group:'throttle',
+    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
+  { id:'pedald', pid:'0149', name:'Pedal Position D', unit:'%', group:'throttle',
+    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
+  { id:'pedale', pid:'014A', name:'Pedal Position E', unit:'%', group:'throttle',
+    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
+  { id:'cmdthrottle', pid:'014C', name:'Commanded Throttle', unit:'%', group:'throttle',
+    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
+
+  // SYSTEM
+  { id:'voltage', pid:'0142', name:'Control Module Voltage', unit:'V', group:'system',
+    decode: h => (parseInt(h.substr(0,4),16)/1000).toFixed(2) },
+  { id:'baro', pid:'0133', name:'Barometric Pressure', unit:'kPa', group:'system',
+    decode: h => parseInt(h.substr(0,2),16) },
+  { id:'milkm', pid:'0121', name:'Distance with MIL', unit:'km', group:'system',
+    decode: h => parseInt(h.substr(0,4),16) },
+
+  // EXPERIMENTAL
+  { id:'pid2105', pid:'2105', name:'2105 - Likely Driveshaft/Wheel Speed', unit:'raw', group:'experimental', mode21: true,
+    decode: h => parseInt(h.substr(0,4),16) },
+];
+
+function buildGrids() {
+  const groupTargets = {
+    engine: 'grid-engine', trans: 'grid-trans', emissions: 'grid-emissions',
+    throttle: 'grid-throttle', system: 'grid-system', experimental: 'grid-experimental'
+  };
+  for (const g of GAUGES) {
+    const container = document.getElementById(groupTargets[g.group]);
+    const card = document.createElement('div');
+    card.className = 'gauge-card' + (g.group === 'experimental' ? ' exp' : '');
+    card.id = 'card-' + g.id;
+    card.innerHTML =
+      '<div class="gauge-pid">' + (g.mode21 ? 'MODE 21' : 'MODE 01') + ' &middot; <span class="code">' + g.pid + '</span></div>' +
+      '<div class="gauge-name">' + g.name + '</div>' +
+      '<div class="gauge-reading"><span class="gauge-value" id="val-' + g.id + '">--</span><span class="gauge-unit">' + g.unit + '</span></div>';
+    container.appendChild(card);
+  }
+}
+buildGrids();
+
+const setConn = (text, cls) => {
+  document.getElementById('connText').textContent = text;
+  document.getElementById('connDot').className = 'conn-dot ' + (cls || '');
+};
+const setStatusLine = (text) => { document.getElementById('statusLine').textContent = text; };
+
+function handleNotify(event) {
+  const value = event.target.value;
+  const decoder = new TextDecoder('ascii');
+  const chunk = decoder.decode(value);
+  rxBuffer += chunk;
+  const dbg = document.getElementById('liveDebug');
+  if (dbg) dbg.textContent = chunk.includes('>') ? '' : 'rx: ' + JSON.stringify(chunk);
+  if (rxBuffer.includes('>')) {
+    const fullResponse = rxBuffer;
+    rxBuffer = '';
+    if (responseResolve) { responseResolve(fullResponse); responseResolve = null; }
+  }
+}
+
+function sendCommand(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 5000;
+  return new Promise(async (resolve, reject) => {
+    try {
+      rxBuffer = '';
+      const encoder = new TextEncoder();
+      responseResolve = resolve;
+      await writeChar.writeValue(encoder.encode(cmd + '\r'));
+      setTimeout(() => {
+        if (responseResolve) { responseResolve = null; rxBuffer = ''; reject(new Error('Timeout: ' + cmd)); }
+      }, timeoutMs);
+    } catch (err) { reject(err); }
+  });
+}
+
+async function sendFast(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 4000;
+  try { return await sendCommand(cmd, timeoutMs); }
+  catch (err) {
+    try { await writeChar.writeValue(new TextEncoder().encode('\r')); } catch(e2) {}
+    await new Promise(r => setTimeout(r, 350));
+    rxBuffer = ''; responseResolve = null;
+    return 'TIMEOUT';
+  }
+}
+
+function withWatchdog(promiseFactory, ms) {
+  return Promise.race([
+    promiseFactory(),
+    new Promise(resolve => setTimeout(() => {
+      responseResolve = null; rxBuffer = ''; consecutiveWatchdogFires++;
+      resolve('WATCHDOG_TIMEOUT');
+    }, ms))
+  ]);
+}
+async function sendGuarded(cmd) {
+  const result = await withWatchdog(() => sendFast(cmd), 7000);
+  if (result !== 'WATCHDOG_TIMEOUT') consecutiveWatchdogFires = 0;
+  return result;
+}
+
+async function attemptReconnect() {
+  setStatusLine('Link stuck - reconnecting...');
+  setConn('Reconnecting...', 'err');
+  try {
+    if (device && device.gatt && device.gatt.connected) device.gatt.disconnect();
+    await new Promise(r => setTimeout(r, 1500));
+    server = await device.gatt.connect();
+    const service = await server.getPrimaryService(FFF0_SERVICE);
+    writeChar = await service.getCharacteristic(FFF2_WRITE);
+    notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
+    await sendCommand('ATE0', 4000);
+    consecutiveWatchdogFires = 0;
+    setConn('Live', 'live');
+    setStatusLine('Reconnected.');
+  } catch (err) {
+    setConn('Disconnected', 'err');
+    setStatusLine('Reconnect failed: ' + err.message);
+  }
+}
+
+function cleanHex(raw) {
+  return raw.replace(/SEARCHING\.\.\.\r?/g, '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+}
+
+document.getElementById('connectBtn').addEventListener('click', async () => {
+  try {
+    setConn('Requesting device...', '');
+    device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [FFF0_SERVICE] });
+    setConn('Connecting...', '');
+    server = await device.gatt.connect();
+    const service = await server.getPrimaryService(FFF0_SERVICE);
+    writeChar = await service.getCharacteristic(FFF2_WRITE);
+    notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
+
+    setConn('Initializing...', '');
+    await sendCommand('ATZ', 3000);
+    await new Promise(r => setTimeout(r, 1000));
+    await sendCommand('ATE0');
+    await sendCommand('ATL0');
+    await sendCommand('ATH1');
+    await sendCommand('ATS0');
+    await sendCommand('ATSP0');
+    await sendCommand('0100', 6000);
+
+    setConn('Connected', 'live');
+    setStatusLine('Ready.');
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('testBtn').disabled = false;
+  } catch (err) {
+    setConn('Connection failed', 'err');
+    setStatusLine(err.message);
+  }
+});
+
+function extractAndDecode(g, raw) {
+  const hex = cleanHex(raw);
+  const respCode = (g.mode21 ? '61' : '41') + g.pid.substring(2);
+  const idx = hex.indexOf(respCode);
+  if (idx === -1) return null;
+  const dataHex = hex.substring(idx + 4);
+  try { return g.decode(dataHex); } catch (e) { return null; }
+}
+
+function updateGauge(g, value) {
+  const el = document.getElementById('val-' + g.id);
+  if (!el) return;
+  if (value === null) {
+    el.classList.add('stale');
+  } else {
+    el.textContent = value;
+    el.classList.remove('stale');
+  }
+}
+
+async function readingsLoop() {
+  loggingActive = true;
+  while (loggingActive) {
+    for (const g of GAUGES) {
+      if (!loggingActive) break;
+      setStatusLine('Reading ' + g.pid + ' (' + g.name + ')...');
+      const raw = await sendGuarded(g.pid);
+      if (consecutiveWatchdogFires >= 3) await attemptReconnect();
+      const value = extractAndDecode(g, raw);
+      updateGauge(g, value);
+    }
+  }
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  document.getElementById('connectBtn').disabled = true;
+  setStatusLine('Live readings active...');
+  readingsLoop();
+});
+
+document.getElementById('stopBtn').addEventListener('click', () => {
+  loggingActive = false;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+  document.getElementById('connectBtn').disabled = false;
+  setStatusLine('Stopped.');
+});
+
+// ---------- SELF-TEST ----------
+document.getElementById('testBtn').addEventListener('click', async () => {
+  document.getElementById('testBtn').disabled = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('connectBtn').disabled = true;
+  const panel = document.getElementById('testPanel');
+  panel.style.display = 'block';
+  document.getElementById('testResults').innerHTML = '';
+  document.getElementById('testSummary').textContent = 'Running...';
+
+  const results = [];
+  for (const g of GAUGES) {
+    setStatusLine('Self-test: ' + g.pid + ' (' + g.name + ')...');
+    const raw = await sendGuarded(g.pid);
+    if (consecutiveWatchdogFires >= 3) await attemptReconnect();
+    const hex = cleanHex(raw);
+    let status, value;
+    if (raw === 'TIMEOUT' || raw === 'WATCHDOG_TIMEOUT') {
+      status = 'TIMEOUT';
+    } else {
+      value = extractAndDecode(g, raw);
+      status = value !== null ? 'OK' : 'NO-MATCH';
+    }
+    results.push({ gauge: g, status, value, raw: hex });
+    if (status === 'OK') updateGauge(g, value);
+  }
+
+  // Sort: failures first (TIMEOUT, then NO-MATCH), then OK
+  const order = { 'TIMEOUT': 0, 'NO-MATCH': 1, 'OK': 2 };
+  results.sort((a, b) => order[a.status] - order[b.status]);
+
+  const okCount = results.filter(r => r.status === 'OK').length;
+  document.getElementById('testSummary').textContent =
+    okCount + ' / ' + results.length + ' responded';
+
+  const tbody = document.getElementById('testResults');
+  let html = '<table style="width:100%; border-collapse:collapse;">' +
+    '<thead><tr style="color:var(--ink-dim); text-align:left;">' +
+    '<th style="padding:4px;">Status</th><th style="padding:4px;">PID</th>' +
+    '<th style="padding:4px;">Name</th><th style="padding:4px;">Value</th></tr></thead><tbody>';
+  for (const r of results) {
+    const color = r.status === 'OK' ? 'var(--confirmed)' : (r.status === 'TIMEOUT' ? 'var(--danger)' : 'var(--amber)');
+    html += '<tr style="border-bottom:1px solid var(--line);">' +
+      '<td style="padding:4px; color:' + color + '; font-weight:600;">' + r.status + '</td>' +
+      '<td style="padding:4px; color:var(--ink-dim);">' + r.gauge.pid + '</td>' +
+      '<td style="padding:4px;">' + r.gauge.name + '</td>' +
+      '<td style="padding:4px; color:var(--ink-dim);">' + (r.value !== undefined ? r.value : (r.raw || '')) + '</td>' +
+      '</tr>';
+  }
+  html += '</tbody></table>';
+  tbody.innerHTML = html;
+
+  setStatusLine('Self-test complete: ' + okCount + '/' + results.length + ' OK.');
+  document.getElementById('testBtn').disabled = false;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('connectBtn').disabled = false;
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  loggingActive = false;
+  rxBuffer = ''; responseResolve = null; consecutiveWatchdogFires = 0;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+  document.getElementById('connectBtn').disabled = false;
+  setStatusLine('Reset.');
+});
+</script>
+</body>
+</html>
