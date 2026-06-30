@@ -201,11 +201,20 @@
   <button id="connectBtn" class="primary">Connect</button>
   <button id="startBtn" class="primary" disabled>Start Live Readings</button>
   <button id="stopBtn" disabled>Stop</button>
+  <button id="testBtn" class="primary" disabled>Run Self-Test</button>
   <button id="resetBtn" class="danger">Force Reset</button>
   <span id="statusLine"></span>
 </div>
 
 <div id="liveDebug"></div>
+
+<div id="testPanel" style="display:none; max-width:1040px; margin:0 auto 24px; background:var(--bg-panel); border:1px solid var(--line); border-radius:8px; padding:14px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+    <div class="label-font" style="font-size:13px; font-weight:600;">Self-Test Results</div>
+    <div id="testSummary" style="font-size:11px; color:var(--ink-dim);"></div>
+  </div>
+  <div id="testResults" style="font-size:11px; max-height:280px; overflow-y:auto;"></div>
+</div>
 
 <!-- ENGINE -->
 <div class="section">
@@ -495,6 +504,7 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
     setConn('Connected', 'live');
     setStatusLine('Ready.');
     document.getElementById('startBtn').disabled = false;
+    document.getElementById('testBtn').disabled = false;
   } catch (err) {
     setConn('Connection failed', 'err');
     setStatusLine(err.message);
@@ -549,6 +559,64 @@ document.getElementById('stopBtn').addEventListener('click', () => {
   document.getElementById('stopBtn').disabled = true;
   document.getElementById('connectBtn').disabled = false;
   setStatusLine('Stopped.');
+});
+
+// ---------- SELF-TEST ----------
+document.getElementById('testBtn').addEventListener('click', async () => {
+  document.getElementById('testBtn').disabled = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('connectBtn').disabled = true;
+  const panel = document.getElementById('testPanel');
+  panel.style.display = 'block';
+  document.getElementById('testResults').innerHTML = '';
+  document.getElementById('testSummary').textContent = 'Running...';
+
+  const results = [];
+  for (const g of GAUGES) {
+    setStatusLine('Self-test: ' + g.pid + ' (' + g.name + ')...');
+    const raw = await sendGuarded(g.pid);
+    if (consecutiveWatchdogFires >= 3) await attemptReconnect();
+    const hex = cleanHex(raw);
+    let status, value;
+    if (raw === 'TIMEOUT' || raw === 'WATCHDOG_TIMEOUT') {
+      status = 'TIMEOUT';
+    } else {
+      value = extractAndDecode(g, raw);
+      status = value !== null ? 'OK' : 'NO-MATCH';
+    }
+    results.push({ gauge: g, status, value, raw: hex });
+    if (status === 'OK') updateGauge(g, value);
+  }
+
+  // Sort: failures first (TIMEOUT, then NO-MATCH), then OK
+  const order = { 'TIMEOUT': 0, 'NO-MATCH': 1, 'OK': 2 };
+  results.sort((a, b) => order[a.status] - order[b.status]);
+
+  const okCount = results.filter(r => r.status === 'OK').length;
+  document.getElementById('testSummary').textContent =
+    okCount + ' / ' + results.length + ' responded';
+
+  const tbody = document.getElementById('testResults');
+  let html = '<table style="width:100%; border-collapse:collapse;">' +
+    '<thead><tr style="color:var(--ink-dim); text-align:left;">' +
+    '<th style="padding:4px;">Status</th><th style="padding:4px;">PID</th>' +
+    '<th style="padding:4px;">Name</th><th style="padding:4px;">Value</th></tr></thead><tbody>';
+  for (const r of results) {
+    const color = r.status === 'OK' ? 'var(--confirmed)' : (r.status === 'TIMEOUT' ? 'var(--danger)' : 'var(--amber)');
+    html += '<tr style="border-bottom:1px solid var(--line);">' +
+      '<td style="padding:4px; color:' + color + '; font-weight:600;">' + r.status + '</td>' +
+      '<td style="padding:4px; color:var(--ink-dim);">' + r.gauge.pid + '</td>' +
+      '<td style="padding:4px;">' + r.gauge.name + '</td>' +
+      '<td style="padding:4px; color:var(--ink-dim);">' + (r.value !== undefined ? r.value : (r.raw || '')) + '</td>' +
+      '</tr>';
+  }
+  html += '</tbody></table>';
+  tbody.innerHTML = html;
+
+  setStatusLine('Self-test complete: ' + okCount + '/' + results.length + ' OK.');
+  document.getElementById('testBtn').disabled = false;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('connectBtn').disabled = false;
 });
 
 document.getElementById('resetBtn').addEventListener('click', () => {
