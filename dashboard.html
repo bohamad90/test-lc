@@ -6,670 +6,713 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="LC79 Power" />
-<meta name="theme-color" content="#0B0E11" />
-<title>LC79 Camper Power</title>
+<title>LC79 Power</title>
+<script>try{if(localStorage.getItem('lc79-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}</script>
 <style>
-  :root {
-    --bg: #0B0E11; --panel: #14181D; --panel-raised: #181D23; --hairline: #262C33;
-    --ink: #E8EAED; --ink-dim: #8A929C; --ink-faint: #5B636D;
-    --amber: #D98E04; --amber-dim: #8A5E08; --good: #4ADE9C; --good-dim: #2C7A57;
-    --alarm: #E5484D; --blue: #5B9FD9;
+  :root{
+    --bg:#EDF1F6; --bg2:#E4EAF2; --card:#FFFFFF; --soft:#F4F7FB; --soft2:#EDF2F8;
+    --line:#E3E9F0; --line2:#D4DCE6;
+    --ink:#172230; --dim:#5C6878; --faint:#94A0AE;
+    --blue:#2F6FED; --green:#15A66B; --amber:#E0941B; --red:#E0413E; --victron:#1763B8;
+    --blue-soft:rgba(47,111,237,0.10); --green-soft:rgba(21,166,107,0.11);
+    --amber-soft:rgba(224,148,27,0.12); --red-soft:rgba(224,65,62,0.10);
+    --shadow:0 1px 3px rgba(20,40,80,0.06), 0 1px 2px rgba(20,40,80,0.04);
+    --shadow-sm:0 1px 2px rgba(20,40,80,0.05);
+    --mono:'SF Mono',ui-monospace,'Roboto Mono',monospace;
+    --r-card:18px; --r-tile:13px; --r-chip:20px;
   }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body {
-    background: var(--bg); margin: 0; color: var(--ink);
-    font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+  [data-theme="dark"]{
+    --bg:#000000; --bg2:#000000; --card:#0D1117; --soft:#111519; --soft2:#161B21;
+    --line:#1C2530; --line2:#26323F;
+    --ink:#E8EEF4; --dim:#9AA8B6; --faint:#5A6875;
+    --blue:#4F8BF7; --green:#2DBE82; --amber:#F0AB3E; --red:#F36C68; --victron:#5B9BE8;
+    --blue-soft:rgba(79,139,247,0.13); --green-soft:rgba(45,190,130,0.13);
+    --amber-soft:rgba(240,171,62,0.13); --red-soft:rgba(243,108,104,0.12);
+    --shadow:0 1px 4px rgba(0,0,0,0.7), 0 1px 2px rgba(0,0,0,0.5);
+    --shadow-sm:0 1px 3px rgba(0,0,0,0.6);
   }
-  .screen { max-width: 460px; margin: 0 auto; min-height: 100vh; padding: 0 0 48px; position: relative; }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  .no-trans *{transition:none !important;}
+  html,body{background:var(--bg);margin:0;color:var(--ink);font-family:-apple-system,system-ui,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;transition:background-color .25s ease;}
+  body{background:radial-gradient(1200px 480px at 50% -8%, var(--bg2), transparent 60%) no-repeat, var(--bg);}
+  .screen{max-width:480px;margin:0 auto;min-height:100vh;padding:0 16px 44px;}
+  i[data-lucide]{display:inline-flex;width:1em;height:1em;vertical-align:-0.13em;}
+  i[data-lucide] svg{width:1em;height:1em;}
 
-  .topbar { padding: 18px 20px 14px; display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--hairline); }
-  .topbar .title { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
-  .topbar .title .dim { color: var(--ink-dim); font-weight: 500; }
-  .topbar .clock { font-family: 'SF Mono', ui-monospace, monospace; font-size: 13px; color: var(--ink-dim); letter-spacing: 0.02em; }
+  .hdr{display:flex;align-items:center;justify-content:space-between;padding:20px 2px 14px;gap:10px;}
+  .brand{display:flex;align-items:center;gap:10px;min-width:0;}
+  .mark{width:34px;height:34px;border-radius:10px;flex:none;display:grid;place-items:center;background:var(--blue);color:#fff;font-size:17px;box-shadow:0 2px 6px rgba(47,111,237,0.35);}
+  .brand .tx{line-height:1;min-width:0;}
+  .brand .tx b{font-size:16.5px;font-weight:700;letter-spacing:-0.02em;white-space:nowrap;display:block;}
+  .brand .tx small{font-size:11px;color:var(--faint);font-weight:500;letter-spacing:0.02em;}
+  .hdr .r{display:flex;align-items:center;gap:9px;flex:none;}
+  .clk{font-family:var(--mono);font-size:12.5px;color:var(--dim);white-space:nowrap;}
+  .live{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--green);background:var(--green-soft);border-radius:var(--r-chip);padding:4px 9px;}
+  .live.standby{color:var(--faint);background:var(--soft);}
+  .live .pulse{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 var(--green);animation:pulse 2s infinite;}
+  .live.standby .pulse{background:var(--faint);animation:none;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(21,166,107,.5);}70%{box-shadow:0 0 0 6px rgba(21,166,107,0);}100%{box-shadow:0 0 0 0 rgba(21,166,107,0);}}
+  .iconbtn{width:34px;height:34px;border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--dim);display:grid;place-items:center;font-size:16px;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform .12s,color .15s;}
+  .iconbtn:active{transform:scale(0.92);}
 
-  /* Connection bar */
-  .conn-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 14px 16px 4px; }
-  .conn-btn {
-    background: var(--panel-raised); border: 1px solid var(--hairline); border-radius: 12px;
-    padding: 11px 8px; color: var(--ink); font-size: 12.5px; font-weight: 600; text-align: center;
-    display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer;
+  .conn{display:grid;grid-template-columns:repeat(3,1fr) auto;gap:8px;}
+  .cbtn{background:var(--card);border:1px solid var(--line);border-radius:var(--r-tile);padding:11px 6px;text-align:center;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:var(--shadow-sm);color:var(--dim);cursor:pointer;transition:border-color .15s,color .15s;}
+  .cbtn i{font-size:14px;}
+  .cbtn .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none;}
+  .cbtn.on{border-color:rgba(47,111,237,0.4);color:var(--ink);}
+  .cbtn.on .dot{background:var(--green);box-shadow:0 0 0 3px var(--green-soft);}
+  .cbtn.connecting .dot{background:var(--amber);}
+  .cbtn.allbtn{background:var(--blue);color:#fff;border-color:var(--blue);box-shadow:0 2px 6px rgba(47,111,237,0.3);}
+
+  .keyrow{display:flex;align-items:center;gap:8px;background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:7px 8px 7px 13px;margin-top:9px;}
+  .keyrow i.k{font-size:13px;color:var(--faint);}
+  .keyrow .kv{flex:1;font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:0.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
+  .keyrow input.kedit{flex:1;font-family:var(--mono);font-size:11.5px;background:var(--card);border:1px solid var(--blue);border-radius:7px;color:var(--ink);padding:5px 8px;min-width:0;}
+  .keyrow .kbtn{border:1px solid var(--line2);background:var(--card);color:var(--dim);border-radius:8px;padding:5px 7px;font-size:13px;cursor:pointer;display:grid;place-items:center;}
+
+  .alert{margin-top:11px;background:var(--red-soft);border:1px solid var(--red);color:var(--red);border-radius:12px;padding:11px 13px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:9px;}
+  .alert i{font-size:16px;flex:none;}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);padding:18px;box-shadow:var(--shadow);}
+  .sec{display:flex;align-items:center;gap:7px;padding:24px 4px 11px;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;color:var(--dim);font-weight:700;}
+  .sec i{font-size:14px;color:var(--faint);}
+  .sec .rt{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:10px;color:var(--green);text-transform:none;letter-spacing:0;font-weight:700;}
+  .sec .rt.stale{color:var(--red);}
+  .sec .rt .pulse{width:5px;height:5px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
+
+  .battery{margin-top:12px;}
+  .btop{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;}
+  .btitle{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:9px;display:flex;align-items:center;gap:6px;font-weight:700;}
+  .btitle i{font-size:14px;}
+  .pc{font-family:var(--mono);font-size:46px;font-weight:700;letter-spacing:-0.03em;line-height:0.86;}
+  .pc s{font-size:20px;color:var(--faint);text-decoration:none;}
+  .st{text-align:right;}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:5px 10px;border-radius:var(--r-chip);background:var(--amber-soft);color:var(--amber);}
+  .chip.charging{background:var(--green-soft);color:var(--green);}
+  .chip.idle{background:var(--soft);color:var(--faint);}
+  .chip i{font-size:13px;}
+  .ttl{font-size:11.5px;color:var(--faint);margin-top:8px;display:flex;align-items:center;gap:5px;justify-content:flex-end;}
+  .ttl i{font-size:12px;}
+
+  .batt{display:flex;align-items:center;gap:5px;}
+  .batt-body{flex:1;height:28px;border-radius:9px;background:var(--soft);border:2px solid var(--line2);overflow:hidden;position:relative;}
+  .batt-body .fill{position:absolute;top:0;bottom:0;left:0;background:var(--green);transition:width .4s ease,background .3s;}
+  .batt-body .ticks{position:absolute;inset:0;display:flex;justify-content:space-between;pointer-events:none;}
+  .batt-body .ticks span{width:1px;background:rgba(120,140,160,0.18);}
+  .batt-cap{width:5px;height:13px;border-radius:0 3px 3px 0;background:var(--line2);}
+  .bscale{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--faint);}
+
+  .chartwrap{margin-top:16px;padding-top:15px;border-top:1px solid var(--line);}
+  .chart-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .chart-h .lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--faint);}
+  .chart-h .rng{font-size:10.5px;color:var(--faint);font-family:var(--mono);}
+  svg.chart{width:100%;height:auto;display:block;overflow:visible;}
+  .xax{display:flex;justify-content:space-between;margin-top:5px;font-size:9.5px;color:var(--faint);font-family:var(--mono);}
+
+  .brow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px;}
+  .stat .k{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:0.05em;display:flex;align-items:center;gap:4px;}
+  .stat .k i{font-size:12px;}
+  .stat .v{font-family:var(--mono);font-size:19px;font-weight:700;margin-top:4px;}
+  .stat .v s{font-size:11px;color:var(--dim);text-decoration:none;}
+  .stat .v.amber{color:var(--amber);}
+  .stat .v.green{color:var(--green);}
+  .stat svg.mini{width:100%;height:18px;margin-top:5px;display:block;overflow:visible;}
+
+  .capline{display:flex;align-items:center;gap:7px;margin-top:15px;padding-top:13px;border-top:1px solid var(--line);font-size:12px;color:var(--dim);}
+  .capline input{width:54px;background:var(--soft);border:1px solid var(--line2);border-radius:8px;color:var(--ink);font-family:var(--mono);font-size:12px;padding:5px 7px;text-align:right;}
+  .capline button{margin-left:auto;background:var(--soft);border:1px solid var(--line2);border-radius:8px;color:var(--dim);font-size:11px;padding:6px 12px;font-weight:600;cursor:pointer;}
+
+  .vbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .vmodel{font-size:11px;color:var(--faint);font-family:var(--mono);letter-spacing:0.01em;}
+  .vendor{display:inline-flex;align-items:baseline;gap:4px;font-size:13px;font-weight:800;color:var(--victron);letter-spacing:-0.015em;}
+  .vendor span{font-weight:500;opacity:0.9;}
+  .stop{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;font-size:13px;color:var(--dim);}
+  .stop b{color:var(--green);font-family:var(--mono);}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .m{background:var(--soft);border:1px solid var(--line);border-radius:var(--r-tile);padding:12px 13px;}
+  .m .k{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:0.05em;display:flex;align-items:center;gap:4px;}
+  .m .k i{font-size:12px;}
+  .m .v{font-family:var(--mono);font-size:20px;font-weight:700;margin-top:5px;}
+  .m .v s{font-size:11px;color:var(--dim);text-decoration:none;}
+  .m .v.amber{color:var(--amber);}
+
+  .swh{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;flex-wrap:wrap;}
+  .swh .t{font-size:15px;font-weight:700;display:flex;align-items:baseline;gap:8px;}
+  .swh .t span{color:var(--faint);font-weight:500;font-size:12px;}
+  .swa{display:flex;gap:6px;flex-wrap:wrap;}
+  .swa button{font-size:11.5px;font-weight:600;background:var(--soft);color:var(--dim);border:1px solid var(--line2);border-radius:9px;padding:6px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;}
+  .swa button i{font-size:13px;}
+  .swa button.danger{color:var(--red);}
+  .swa button.active{background:var(--blue-soft);color:var(--blue);border-color:var(--blue);}
+  .swgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .ch{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:12px 10px 11px;text-align:center;cursor:pointer;transition:transform .12s ease,background .14s,border-color .14s;position:relative;}
+  .ch:active{transform:scale(0.97);}
+  .iconwrap{position:relative;width:42px;margin:0 auto;}
+  .ch .icn{font-size:20px;color:var(--faint);width:42px;height:42px;border-radius:12px;display:grid;place-items:center;cursor:pointer;}
+  .ch .editdot{position:absolute;top:-3px;right:-3px;width:17px;height:17px;border-radius:50%;background:var(--card);border:1px solid var(--line2);color:var(--faint);display:grid;place-items:center;cursor:pointer;opacity:0;transition:opacity .14s;box-shadow:var(--shadow-sm);}
+  .ch:hover .editdot,.editMode .ch .editdot{opacity:1;}
+  .ch .editdot i{font-size:10px;}
+  .ch .nm{font-size:12px;font-weight:600;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .nm-input{width:100%;font-size:11.5px;font-weight:600;text-align:center;background:var(--soft2);border:1px solid var(--blue);border-radius:6px;color:var(--ink);padding:3px 5px;margin-top:6px;outline:none;}
+  [data-theme="dark"] .nm-input{background:#111B27;}
+  .ch .chn{font-size:9px;color:var(--faint);margin-top:2px;letter-spacing:0.04em;font-family:var(--mono);}
+  .ch .stt{font-size:9.5px;font-weight:700;letter-spacing:0.06em;color:var(--faint);margin-top:9px;}
+  .ch.on{background:var(--blue-soft);border-color:var(--blue);}
+  .ch.on .icn{color:var(--blue);}
+  .ch.on .stt{color:var(--blue);}
+  [data-theme="dark"] .ch{background:#0A0D10;border-color:#1B2530;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 2px 5px rgba(0,0,0,0.5);}
+  [data-theme="dark"] .ch .icn{color:rgba(170,195,220,0.65);}
+  [data-theme="dark"] .ch.on{background:#08172A;border-color:var(--blue);box-shadow:0 0 0 1px rgba(79,139,247,0.22),inset 0 0 22px rgba(79,139,247,0.08);}
+  [data-theme="dark"] .ch.on .icn{color:#fff;}
+
+  .modal{position:fixed;inset:0;background:rgba(8,14,22,0.55);display:grid;place-items:center;z-index:50;padding:24px;}
+  .modal[hidden]{display:none;}
+  .modal-card{background:var(--card);border:1px solid var(--line2);border-radius:18px;padding:18px;width:100%;max-width:336px;box-shadow:0 16px 48px rgba(0,0,0,0.35);}
+  .modal-h{display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:700;margin-bottom:14px;}
+  .modal-h .msub{font-size:11px;color:var(--faint);font-weight:500;}
+  .modal-h button{border:none;background:var(--soft);color:var(--dim);width:28px;height:28px;border-radius:9px;cursor:pointer;font-size:14px;}
+  .emoji-row{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:13px;border-bottom:1px solid var(--line);}
+  .emoji-preview{font-size:26px;width:36px;height:36px;display:grid;place-items:center;flex:none;line-height:1;}
+  .emoji-row input{flex:1;background:var(--soft);border:1px solid var(--line2);border-radius:9px;padding:7px 10px;font-size:20px;color:var(--ink);outline:none;min-width:0;}
+  .emoji-row input:focus{border-color:var(--blue);}
+  .emoji-row .use{background:var(--blue);color:#fff;border:none;border-radius:9px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex:none;}
+  .icon-pick{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;max-height:48vh;overflow-y:auto;}
+  .icon-pick button{aspect-ratio:1;border:1px solid var(--line);background:var(--soft);border-radius:12px;font-size:20px;cursor:pointer;display:grid;place-items:center;}
+  .icon-pick button.cur{border-color:var(--blue);background:var(--blue-soft);}
+
+  .aux{background:var(--card);border:1px dashed var(--line2);border-radius:16px;padding:20px;text-align:center;color:var(--faint);font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:9px;}
+  .aux i{font-size:16px;}
+  details.raw{margin-top:11px;background:var(--card);border:1px solid var(--line);border-radius:13px;padding:12px 15px;font-size:12px;color:var(--dim);box-shadow:var(--shadow-sm);}
+  details.raw summary{cursor:pointer;font-weight:600;display:flex;align-items:center;gap:7px;list-style:none;}
+  details.raw summary::-webkit-details-marker{display:none;}
+  details.raw summary i{font-size:14px;color:var(--faint);transition:transform .2s;}
+  details.raw[open] summary i{transform:rotate(90deg);}
+  .rawdump{margin-top:9px;font-family:var(--mono);color:var(--faint);white-space:pre-wrap;max-height:170px;overflow:auto;font-size:11px;}
+
+  .foot{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px;}
+  .fc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 8px;text-align:center;box-shadow:var(--shadow-sm);}
+  .fc .d{width:6px;height:6px;border-radius:50%;background:var(--green);margin:0 auto 6px;box-shadow:0 0 0 3px var(--green-soft);}
+  .fc .d.off{background:var(--faint);box-shadow:none;}
+  .fc .l{font-size:10.5px;color:var(--dim);font-weight:600;}
+  .logline{margin-top:14px;font-family:var(--mono);font-size:10.5px;color:var(--faint);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 12px;height:78px;overflow-y:auto;white-space:pre-wrap;}
+
+  /* ---- iPad (portrait + landscape): widen the column, scale up ---- */
+  @media (min-width:700px){
+    .screen{max-width:820px;padding:0 24px 56px;}
+    .hdr{padding:28px 4px 18px;}
+    .mark{width:40px;height:40px;font-size:20px;}
+    .brand .tx b{font-size:19px;}
+    .brand .tx small{font-size:12.5px;}
+    .clk{font-size:14px;}
+    .conn{gap:12px;}
+    .cbtn{padding:14px 8px;font-size:14px;border-radius:15px;}
+    .cbtn i{font-size:16px;}
+    .keyrow{padding:9px 10px 9px 15px;}
+    .card{padding:24px;border-radius:22px;}
+    .sec{font-size:12px;padding:28px 6px 12px;}
+    .btitle{font-size:12px;}
+    .pc{font-size:60px;}
+    .pc s{font-size:26px;}
+    .chip{font-size:13px;padding:6px 12px;}
+    .batt-body{height:34px;}
+    .bscale{font-size:11px;}
+    .brow{gap:14px;margin-top:20px;}
+    .stat .k{font-size:11px;}
+    .stat .v{font-size:23px;}
+    .stat svg.mini{height:22px;}
+    .capline{font-size:13px;}
+    .vmodel{font-size:12px;}
+    .vendor{font-size:15px;}
+    .stop{font-size:14px;}
+    .m{padding:14px 15px;}
+    .m .v{font-size:23px;}
+    svg.chart{max-height:130px;}
+    .swh .t{font-size:17px;}
+    .swa button{font-size:12.5px;padding:7px 12px;}
+    .swgrid{grid-template-columns:repeat(4,1fr);gap:14px;}
+    .ch{padding:16px 12px 14px;border-radius:16px;}
+    .iconwrap{width:48px;}
+    .ch .icn{font-size:24px;width:48px;height:48px;}
+    .ch .nm{font-size:13px;}
+    .ch .stt{font-size:10px;}
+    .foot{gap:12px;}
+    .fc{padding:13px 8px;}
+    .fc .l{font-size:11.5px;}
+    .logline{height:96px;font-size:11.5px;}
   }
-  .conn-btn .cdot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); }
-  .conn-btn.connected { border-color: var(--good-dim); }
-  .conn-btn.connected .cdot { background: var(--good); box-shadow: 0 0 0 3px rgba(74,222,156,0.15); }
-  .conn-btn.connecting .cdot { background: var(--amber); }
-  .conn-btn .sub { font-size: 9.5px; color: var(--ink-faint); font-weight: 500; }
-
-  .keyrow { padding: 6px 16px 0; }
-  .keyrow input {
-    width: 100%; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--hairline);
-    background: #18181b; color: var(--ink-dim); font-size: 12px; font-family: ui-monospace, monospace;
-  }
-  .keyrow .lbl { font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 2px 5px; }
-
-  .section-label {
-    display: flex; align-items: center; gap: 8px; padding: 22px 20px 10px;
-    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600;
-  }
-  .section-label .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); flex: none; }
-  .section-label .dot.live { background: var(--good); box-shadow: 0 0 0 3px rgba(74,222,156,0.15); }
-  .section-label .dot.amber { background: var(--amber); box-shadow: 0 0 0 3px rgba(217,142,4,0.15); }
-  .section-label .src { margin-left: auto; font-size: 10px; color: var(--ink-faint); letter-spacing: 0.04em; text-transform: none; }
-
-  /* Victron */
-  .victron-panel { margin: 0 16px; background: linear-gradient(180deg, var(--panel-raised), var(--panel)); border: 1px solid var(--hairline); border-radius: 18px; padding: 20px; }
-  .victron-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
-  .victron-name { font-size: 14px; font-weight: 600; }
-  .victron-sub { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
-  .victron-yield { text-align: right; }
-  .victron-yield .num { font-family: ui-monospace, monospace; font-size: 20px; font-weight: 600; color: var(--good); }
-  .victron-yield .lbl { font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; }
-  .pv-flow { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin: 4px 0 20px; }
-  .pv-flow .node { text-align: center; }
-  .pv-flow .node .icon { font-size: 22px; margin-bottom: 6px; opacity: 0.9; }
-  .pv-flow .node .big { font-family: ui-monospace, monospace; font-size: 22px; font-weight: 650; }
-  .pv-flow .node .small { font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
-  .pv-flow .arrow { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px; }
-  .pv-flow .arrow .line { width: 36px; height: 2px; background: linear-gradient(90deg, var(--amber-dim), var(--amber)); border-radius: 2px; position: relative; overflow: hidden; }
-  .pv-flow .arrow .line.active::after { content: ''; position: absolute; top: 0; left: -30%; width: 30%; height: 100%; background: rgba(255,255,255,0.55); animation: flow 1.8s linear infinite; }
-  @keyframes flow { from { left: -30%; } to { left: 100%; } }
-  .pv-flow .arrow .pct { font-size: 10px; color: var(--amber); font-family: ui-monospace, monospace; }
-  .victron-meta { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--hairline); padding-top: 14px; }
-  .victron-meta .m { text-align: center; }
-  .victron-meta .m .v { font-family: ui-monospace, monospace; font-size: 14px; font-weight: 600; }
-  .victron-meta .m .k { font-size: 9.5px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 3px; }
-  .state-pill { display: inline-flex; align-items: center; gap: 5px; background: rgba(74,222,156,0.12); color: var(--good); border-radius: 20px; padding: 5px 10px; font-size: 11px; font-weight: 600; }
-  .state-pill .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--good); }
-
-  /* JuncTek */
-  .shunt-panel { margin: 0 16px; background: var(--panel); border: 1px solid var(--hairline); border-radius: 18px; padding: 20px; display: flex; gap: 20px; align-items: center; }
-  .gauge-wrap { position: relative; width: 132px; height: 132px; flex: none; }
-  .gauge-wrap svg { width: 132px; height: 132px; transform: rotate(-90deg); }
-  .gauge-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .gauge-center .pct { font-family: ui-monospace, monospace; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
-  .gauge-center .pct .sign { font-size: 15px; color: var(--ink-faint); font-weight: 500; }
-  .gauge-center .lbl { font-size: 9.5px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
-  .shunt-stats { flex: 1; display: flex; flex-direction: column; gap: 11px; }
-  .shunt-stat { display: flex; justify-content: space-between; align-items: baseline; }
-  .shunt-stat .k { font-size: 12px; color: var(--ink-dim); }
-  .shunt-stat .v { font-family: ui-monospace, monospace; font-size: 15px; font-weight: 600; }
-  .shunt-stat .v.charging { color: var(--good); }
-  .shunt-stat .v.discharging { color: var(--amber); }
-  .shunt-divider { height: 1px; background: var(--hairline); margin: 2px 0; }
-  .shunt-eta { font-size: 10.5px; color: var(--ink-faint); }
-  .shunt-eta b { color: var(--ink-dim); font-weight: 600; }
-
-  /* MICTUNING */
-  .switch-panel { margin: 0 16px; background: var(--panel); border: 1px solid var(--hairline); border-radius: 18px; padding: 18px 16px 8px; }
-  .switch-head { display: flex; justify-content: space-between; align-items: center; padding: 0 4px 14px; }
-  .switch-head .name { font-size: 14px; font-weight: 600; }
-  .switch-head .count { font-size: 11px; color: var(--ink-faint); }
-  .switch-actions { display: flex; gap: 6px; }
-  .switch-actions button { font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; background: var(--panel-raised); color: var(--ink-dim); border: 1px solid var(--hairline); border-radius: 8px; padding: 5px 10px; cursor: pointer; }
-  .switch-actions button.editing { background: var(--amber); color: #000; border-color: var(--amber); }
-  .switch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding-bottom: 12px; }
-  .switch-cell { background: var(--panel-raised); border: 1px solid var(--hairline); border-radius: 13px; padding: 12px 10px 11px; display: flex; flex-direction: column; gap: 8px; position: relative; min-height: 104px; }
-  .switch-cell.on { border-color: rgba(217,142,4,0.4); background: linear-gradient(160deg, rgba(217,142,4,0.10), var(--panel-raised) 60%); }
-  .switch-cell.disabled { opacity: 0.45; }
-  .switch-cell .glyph { font-size: 17px; line-height: 1; opacity: 0.92; }
-  .switch-cell .cname { font-size: 11.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .switch-cell .ch { font-size: 9px; color: var(--ink-faint); letter-spacing: 0.04em; }
-  .switch-cell input.nameedit { width: 100%; font-size: 11.5px; font-weight: 600; background: #0a0a0c; border: 1px solid var(--amber-dim); border-radius: 6px; color: var(--ink); padding: 4px 6px; }
-  .switch-cell input.glyphedit { width: 46px; font-size: 18px; text-align: center; background: #0a0a0c; border: 1px solid var(--amber-dim); border-radius: 6px; color: var(--ink); padding: 3px; }
-  .toggle-track { margin-top: auto; width: 38px; height: 22px; border-radius: 20px; background: var(--hairline); position: relative; align-self: flex-end; }
-  .toggle-track.on { background: var(--amber); }
-  .toggle-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.4); transition: transform 0.15s ease; }
-  .toggle-track.on .toggle-thumb { transform: translateX(16px); }
-
-  /* Aux fuel (offline placeholder) */
-  .fuel-panel { margin: 0 16px; background: var(--panel); border: 1px dashed var(--hairline); border-radius: 18px; padding: 20px; text-align: center; color: var(--ink-faint); font-size: 12.5px; }
-
-  .conn-strip { margin: 26px 16px 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-  .conn-chip { background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; gap: 7px; }
-  .conn-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); flex: none; }
-  .conn-chip .dot.on { background: var(--good); }
-  .conn-chip .txt { font-size: 10px; color: var(--ink-dim); line-height: 1.3; }
-  .conn-chip .txt b { display: block; color: var(--ink); font-size: 12px; font-weight: 600; margin-bottom: 1px; }
-
-  .log { margin: 18px 16px 0; background: var(--panel); border-radius: 10px; padding: 12px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-faint); height: 120px; overflow-y: auto; white-space: pre-wrap; }
-
-  /* JuncTek charge/discharge state under the SOC gauge */
-  .gauge-center .gauge-state { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; margin-top: 6px; text-transform: uppercase; }
-  .gauge-center .gauge-state.charging { color: var(--good); }
-  .gauge-center .gauge-state.discharging { color: var(--amber); }
-  .gauge-center .gauge-state.idle { color: var(--ink-faint); }
-
-  /* ---------- iPad portrait: use the width, scale everything up ---------- */
-  @media (min-width: 700px) {
-    .screen { max-width: 720px; padding-bottom: 64px; }
-    .topbar { padding: 28px 30px 20px; }
-    .topbar .title { font-size: 25px; }
-    .topbar .clock { font-size: 17px; }
-    .conn-bar { padding: 20px 24px 6px; gap: 14px; }
-    .conn-btn { padding: 18px 10px; font-size: 15.5px; border-radius: 14px; }
-    .conn-btn .cdot { width: 10px; height: 10px; }
-    .conn-btn .sub { font-size: 11px; }
-    .keyrow { padding: 8px 24px 0; }
-    .keyrow input { padding: 12px 14px; font-size: 14px; }
-    .section-label { padding: 28px 28px 12px; font-size: 12px; }
-    .victron-panel, .shunt-panel, .switch-panel { margin: 0 24px; padding: 28px; border-radius: 22px; }
-    .fuel-panel { margin: 0 24px; padding: 28px; font-size: 14px; }
-    .victron-name { font-size: 16px; } .victron-sub { font-size: 12.5px; }
-    .victron-yield .num { font-size: 24px; }
-    .pv-flow .node .icon { font-size: 26px; }
-    .pv-flow .node .big { font-size: 27px; }
-    .pv-flow .node .small { font-size: 11px; }
-    .pv-flow .arrow .line { width: 56px; }
-    .victron-meta .m .v { font-size: 16px; } .victron-meta .m .k { font-size: 11px; }
-    .shunt-panel { gap: 28px; }
-    .gauge-wrap, .gauge-wrap svg { width: 176px; height: 176px; }
-    .gauge-center .pct { font-size: 40px; }
-    .gauge-center .lbl { font-size: 11px; }
-    .gauge-center .gauge-state { font-size: 12px; }
-    .shunt-stats { gap: 15px; }
-    .shunt-stat .k { font-size: 14px; } .shunt-stat .v { font-size: 18px; }
-    .shunt-eta { font-size: 12px; }
-    .switch-head .name { font-size: 16px; }
-    .switch-actions button { font-size: 12px; padding: 7px 13px; }
-    .switch-grid { grid-template-columns: repeat(4, 1fr); gap: 14px; }
-    .switch-cell { min-height: 122px; border-radius: 15px; padding: 14px 12px 13px; }
-    .switch-cell .glyph { font-size: 20px; }
-    .switch-cell input.glyphedit { font-size: 22px; width: 54px; }
-    .switch-cell .cname { font-size: 13px; }
-    .switch-cell .ch { font-size: 10px; }
-    .toggle-track { width: 44px; height: 26px; }
-    .toggle-thumb { width: 22px; height: 22px; }
-    .toggle-track.on .toggle-thumb { transform: translateX(18px); }
-    .conn-strip { margin: 32px 24px 0; gap: 12px; }
-    .conn-chip { padding: 13px 15px; }
-    .log { margin: 22px 24px 0; height: 150px; font-size: 12px; }
-  }
-
-  /* ---------- v4 additions ---------- */
-  .alert-banner { display: none; margin: 12px 16px 0; background: rgba(229,72,77,0.12); border: 1px solid var(--alarm); color: #ffd9da; border-radius: 12px; padding: 11px 14px; font-size: 12.5px; font-weight: 600; }
-  .connall-row { padding: 8px 16px 0; }
-  .connall-btn { width: 100%; background: var(--panel-raised); color: var(--ink); border: 1px solid var(--hairline); border-radius: 12px; padding: 11px; font-size: 13px; font-weight: 600; cursor: pointer; }
-  .cap-input { width: 56px; background: #0a0a0c; border: 1px solid var(--hairline); border-radius: 6px; color: var(--ink); font-family: ui-monospace, monospace; font-size: 11px; padding: 3px 5px; text-align: right; }
-  .cap-save { background: var(--panel-raised); color: var(--ink-dim); border: 1px solid var(--hairline); border-radius: 6px; font-size: 10px; padding: 3px 8px; cursor: pointer; }
-  #masterBtn.on { background: var(--good); color: #000; border-color: var(--good); }
-  .raw-inspector { margin: 10px 16px 0; background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px; padding: 10px 14px; font-size: 11.5px; color: var(--ink-dim); }
-  .raw-inspector summary { cursor: pointer; color: var(--ink-dim); font-weight: 600; }
-  .rawdump { margin-top: 8px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-faint); white-space: pre-wrap; max-height: 200px; overflow: auto; }
 </style>
 </head>
 <body>
 <div class="screen">
-
-  <div class="topbar">
-    <div class="title">LC79 Power<span class="dim" id="liveTag"> · Standby</span></div>
-    <div class="clock" id="clock">--:--</div>
+  <div class="hdr">
+    <div class="brand">
+      <div class="mark"><i data-lucide="zap"></i></div>
+      <div class="tx"><b>LC79 Power</b><small id="subtitle">House systems · standby</small></div>
+    </div>
+    <div class="r">
+      <span class="live standby" id="liveTag"><span class="pulse"></span><span id="liveTxt">standby</span></span>
+      <span class="clk" id="clk">--:--</span>
+      <button class="iconbtn" id="themeBtn" aria-label="Toggle theme"><i data-lucide="moon"></i></button>
+    </div>
   </div>
 
-  <div class="alert-banner" id="alertBanner"></div>
-
-  <!-- CONNECT -->
-  <div class="conn-bar">
-    <div class="conn-btn" id="connSolar"><span class="cdot"></span>Solar<span class="sub">tap to connect</span></div>
-    <div class="conn-btn" id="connBattery"><span class="cdot"></span>Battery<span class="sub">tap to connect</span></div>
-    <div class="conn-btn" id="connSwitches"><span class="cdot"></span>Switches<span class="sub">tap to connect</span></div>
+  <div class="conn">
+    <div class="cbtn" id="connSolar"><span class="dot"></span><i data-lucide="sun"></i>Solar</div>
+    <div class="cbtn" id="connBattery"><span class="dot"></span><i data-lucide="battery-charging"></i>Battery</div>
+    <div class="cbtn" id="connSwitches"><span class="dot"></span><i data-lucide="toggle-right"></i>Switches</div>
+    <div class="cbtn allbtn" id="connAll"><i data-lucide="refresh-cw"></i>All</div>
   </div>
   <div class="keyrow">
-    <div class="lbl">Victron encryption key</div>
-    <input id="solarKey" type="text" placeholder="hex key from VictronConnect" />
+    <i class="k" data-lucide="key-round"></i>
+    <span class="kv" id="apikey">device key · tap to set</span>
+    <button class="kbtn" id="copyKey" aria-label="Copy key"><i data-lucide="copy"></i></button>
   </div>
-  <div class="connall-row"><button id="connectAll" class="connall-btn">Connect all</button></div>
 
-  <!-- VICTRON -->
-  <div class="section-label"><span class="dot" id="dotSolar"></span> Solar · Victron SmartSolar <span class="src">BLE advertised</span></div>
-  <div class="victron-panel">
-    <div class="victron-top">
+  <div class="alert" id="alertBanner" style="display:none;"><i data-lucide="alert-triangle"></i><span id="alertTxt"></span></div>
+
+  <div class="card battery">
+    <div class="btop">
       <div>
-        <div class="victron-name" id="vName">SmartSolar MPPT</div>
-        <div class="victron-sub" id="vSub">Not connected</div>
+        <div class="btitle"><i data-lucide="battery-charging"></i>House battery</div>
+        <div class="pc"><span id="socText">--</span><s>%</s></div>
       </div>
-      <div class="victron-yield"><div class="num"><span id="vYield">--</span> <span style="font-size:12px;color:var(--ink-faint);font-weight:500;">kWh</span></div><div class="lbl">Yield today</div></div>
-    </div>
-    <div class="pv-flow">
-      <div class="node"><div class="icon">☀️</div><div class="big"><span id="vPv">--</span><span style="font-size:13px;color:var(--ink-faint);">W</span></div><div class="small">Panel</div></div>
-      <div class="arrow"><div class="line" id="vFlow"></div><div class="pct" id="vAmps">-- A</div></div>
-      <div class="node"><div class="icon">🔋</div><div class="big"><span id="vVolt">--</span><span style="font-size:13px;color:var(--ink-faint);">V</span></div><div class="small">Battery</div></div>
-    </div>
-    <div class="victron-meta">
-      <div class="m"><div class="v"><span class="state-pill" id="vStatePill" style="display:none;"><span class="dot"></span><span id="vState">--</span></span><span id="vStateDash">--</span></div><div class="k">State</div></div>
-      <div class="m"><div class="v" id="vCurrent">--</div><div class="k">Charge current</div></div>
-      <div class="m"><div class="v" id="vLoad">--</div><div class="k">Load</div></div>
-    </div>
-  </div>
-
-  <!-- JUNCTEK -->
-  <div class="section-label"><span class="dot" id="dotBattery"></span> Battery · JuncTek KM-F <span class="src">BLE text frames</span></div>
-  <div class="shunt-panel">
-    <div class="gauge-wrap">
-      <svg viewBox="0 0 132 132">
-        <circle cx="66" cy="66" r="56" fill="none" stroke="#262C33" stroke-width="10" />
-        <circle id="gaugeArc" cx="66" cy="66" r="56" fill="none" stroke="#4ADE9C" stroke-width="10" stroke-linecap="round" stroke-dasharray="351.86" stroke-dashoffset="351.86" />
-      </svg>
-      <div class="gauge-center"><div class="pct"><span id="socText">--</span><span class="sign">%</span></div><div class="lbl">State of charge</div><div class="gauge-state idle" id="socState">—</div></div>
-    </div>
-    <div class="shunt-stats">
-      <div class="shunt-stat"><span class="k">Voltage</span><span class="v" id="jVolt">-- V</span></div>
-      <div class="shunt-stat"><span class="k">Current</span><span class="v" id="jCurrent">-- A</span></div>
-      <div class="shunt-stat"><span class="k">Power</span><span class="v" id="jPower">-- W</span></div>
-      <div class="shunt-divider"></div>
-      <div class="shunt-stat"><span class="k">Remaining</span><span class="v" id="jRemain">-- Ah</span></div>
-      <div class="shunt-stat"><span class="k">Runtime</span><span class="v" id="jRuntime">—</span></div>
-      <div class="shunt-stat"><span class="k">Est. load</span><span class="v" id="jLoad">—</span></div>
-      <div class="shunt-eta">Capacity <input id="capInput" class="cap-input" type="number" min="1" max="2000" /> Ah <button id="capSave" class="cap-save">set</button></div>
-    </div>
-  </div>
-
-  <details class="raw-inspector"><summary>Raw shunt data — for mapping temperature / totals</summary><div class="rawdump" id="rawDump">Connect the battery to see live A-register values with their indices. Read these against the shunt's own screen so we can identify which index is temperature and which are cumulative totals.</div></details>
-
-  <!-- MICTUNING -->
-  <div class="section-label"><span class="dot" id="dotSwitches"></span> Switches · MICTUNING P1S <span class="src">BLE write</span></div>
-  <div class="switch-panel">
-    <div class="switch-head">
-      <div><div class="name">12-Gang panel</div><div class="count" id="mCount">Not connected</div></div>
-      <div class="switch-actions">
-        <button id="editNamesBtn">Edit</button>
-        <button id="masterBtn">LED</button>
-        <button id="allOnBtn">All on</button>
-        <button id="allOffBtn">All off</button>
+      <div class="st">
+        <div class="chip idle" id="stateChip"><i data-lucide="activity"></i><span id="stateTxt">--</span></div>
+        <div class="ttl"><i data-lucide="clock"></i><span id="runtime">--</span></div>
       </div>
     </div>
-    <div class="switch-grid" id="switchGrid"></div>
+    <div class="batt">
+      <div class="batt-body"><div class="fill" id="battFill" style="width:0%"></div>
+        <div class="ticks"><span></span><span></span><span></span><span></span><span></span></div></div>
+      <div class="batt-cap"></div>
+    </div>
+    <div class="bscale"><span>Empty</span><span>¼</span><span>½</span><span>¾</span><span>Full</span></div>
+
+    <div class="chartwrap">
+      <div class="chart-h"><span class="lbl">State of charge · 24 h</span><span class="rng" id="socRange">collecting…</span></div>
+      <svg class="chart" id="socChart" viewBox="0 0 320 78" preserveAspectRatio="none"></svg>
+      <div class="xax"><span>−24h</span><span>−18h</span><span>−12h</span><span>−6h</span><span>now</span></div>
+    </div>
+
+    <div class="brow">
+      <div class="stat"><div class="k"><i data-lucide="zap"></i>Voltage</div><div class="v"><span id="jVolt">--</span><s> V</s></div><svg class="mini" data-spark="volt"></svg></div>
+      <div class="stat"><div class="k"><i data-lucide="activity"></i>Current</div><div class="v amber" id="jCurrentWrap"><span id="jCurrent">--</span><s> A</s></div><svg class="mini" data-spark="curr"></svg></div>
+      <div class="stat"><div class="k"><i data-lucide="battery"></i>Remaining</div><div class="v"><span id="jRemain">--</span><s> Ah</s></div><svg class="mini" data-spark="rem"></svg></div>
+    </div>
+    <div class="capline">Capacity <input id="capInput" type="number" min="1" max="2000" value="130" /> Ah · Est. load <span id="estLoad">--</span> <button id="capSave">Set</button></div>
   </div>
 
-  <!-- AUX FUEL (offline) -->
-  <div class="section-label"><span class="dot"></span> Aux Tank · Atom Lite Sensor <span class="src">not installed</span></div>
-  <div class="fuel-panel">Aux fuel sensor not built yet — panel reserved for when the Atom Lite hardware is wired.</div>
+  <div class="sec"><i data-lucide="sun"></i>Solar · SmartSolar MPPT<span class="rt" id="solarFresh"><span class="pulse"></span>offline</span></div>
+  <div class="card">
+    <div class="vbar"><span class="vmodel">SmartSolar MPPT 100/30</span><span class="vendor">Victron <span>Energy</span></span></div>
+    <div class="stop"><div>Yield today <b><span id="vYield">--</span> kWh</b></div>
+      <span class="chip charging" id="vStateChip"><i data-lucide="battery-charging"></i><span id="vState">--</span></span></div>
 
-  <!-- FOOTER -->
-  <div class="conn-strip">
-    <div class="conn-chip"><span class="dot" id="chipSolar"></span><span class="txt"><b>Solar</b><span id="chipSolarTxt">offline</span></span></div>
-    <div class="conn-chip"><span class="dot" id="chipBattery"></span><span class="txt"><b>Battery</b><span id="chipBatteryTxt">offline</span></span></div>
-    <div class="conn-chip"><span class="dot" id="chipSwitches"></span><span class="txt"><b>Switches</b><span id="chipSwitchesTxt">offline</span></span></div>
-    <div class="conn-chip"><span class="dot"></span><span class="txt"><b>Aux tank</b>not installed</span></div>
+    <div class="chartwrap" style="margin-top:0;padding-top:0;border-top:none;">
+      <div class="chart-h"><span class="lbl">PV power · 24 h</span><span class="rng" id="solarRange">collecting…</span></div>
+      <svg class="chart" id="solarChart" viewBox="0 0 320 70" preserveAspectRatio="none"></svg>
+      <div class="xax"><span>−24h</span><span>−18h</span><span>−12h</span><span>−6h</span><span>now</span></div>
+    </div>
+
+    <div class="g2" style="margin-top:15px;">
+      <div class="m"><div class="k"><i data-lucide="zap"></i>PV power</div><div class="v amber"><span id="vPv">--</span><s> W</s></div></div>
+      <div class="m"><div class="k"><i data-lucide="plug-zap"></i>Charge current</div><div class="v"><span id="vCurrent">--</span><s> A</s></div></div>
+      <div class="m"><div class="k"><i data-lucide="battery"></i>Battery</div><div class="v"><span id="vVolt">--</span><s> V</s></div></div>
+      <div class="m"><div class="k"><i data-lucide="gauge"></i>Load</div><div class="v"><span id="vLoad">--</span><s> A</s></div></div>
+    </div>
   </div>
 
-  <div class="log" id="log"></div>
+  <div class="sec"><i data-lucide="toggle-right"></i>Switches · P1S 12-gang<span class="rt" id="swFresh"><span class="pulse"></span>offline</span></div>
+  <div class="card">
+    <div class="swh">
+      <div class="t">Circuits <span id="cnt">not connected</span></div>
+      <div class="swa">
+        <button id="editBtn"><i data-lucide="pencil"></i>Edit</button>
+        <button id="masterBtn"><i data-lucide="zap"></i>LED</button>
+        <button id="allOn"><i data-lucide="power"></i>All on</button>
+        <button class="danger" id="allOff"><i data-lucide="power-off"></i>All off</button>
+      </div>
+    </div>
+    <div class="swgrid" id="grid"></div>
+  </div>
+  <details class="raw"><summary><i data-lucide="chevron-right"></i>Raw shunt data — map temperature / totals</summary>
+    <div class="rawdump" id="rawDump">Connect the battery to see live A-register values with their indices.</div>
+  </details>
+
+  <div class="sec"><i data-lucide="fuel"></i>Aux Tank · not installed</div>
+  <div class="aux"><i data-lucide="circle-dashed"></i>Aux fuel sensor not built yet — reserved for the Atom Lite hardware.</div>
+
+  <div class="foot">
+    <div class="fc"><div class="d off" id="fSolar"></div><div class="l">Solar</div></div>
+    <div class="fc"><div class="d off" id="fBattery"></div><div class="l">Battery</div></div>
+    <div class="fc"><div class="d off" id="fSwitches"></div><div class="l">Switches</div></div>
+    <div class="fc"><div class="d off"></div><div class="l">Aux</div></div>
+  </div>
+
+  <div class="logline" id="log"></div>
 </div>
 
-<script src="victron-ble.js?v=8"></script>
+<div class="modal" id="iconModal" hidden>
+  <div class="modal-card">
+    <div class="modal-h"><span>Change icon <span class="msub" id="iconSub"></span></span><button id="iconClose" aria-label="Close">✕</button></div>
+    <div class="emoji-row">
+      <div class="emoji-preview" id="emojiPreview">😀</div>
+      <input id="emojiInput" type="text" placeholder="Type or paste emoji…" maxlength="8" autocomplete="off" />
+      <button class="use" id="emojiUse">Use</button>
+    </div>
+    <div class="icon-pick" id="iconPick"></div>
+  </div>
+</div>
+
+<script src="victron-ble.js?v=9"></script>
 <script src="junctek-shunt-ble.js?v=6"></script>
 <script src="mictuning-ble.js?v=2"></script>
 <script>
-  var DASHBOARD_VERSION = 4;
-  var CHANNEL_COUNT = 12;
-  var BATTERY_AH = 72;
+  var DASHBOARD_VERSION = 7;
+  var CHANNEL_COUNT = 12, BATTERY_AH = 130, LOW_SOC = 20, LOW_VOLT = 11.5;
   var DEFAULT_KEY = '6cc611245a854a60cde278f036c5c98a';
-  var DEFAULT_NAMES = ['Interior','Awning','Fan','Water pump','Fridge','Inverter','Antenna','Slide-out','Heater','Rock lights','Air horn','Aux'];
-  var GLYPHS = ['💡','🔆','🌀','🚰','❄️','🔌','📡','🛗','🔥','💡','🎺','＋'];
-  var GAUGE_C = 351.86;
-  var LOW_SOC = 20;       // % — low-battery alert threshold
-  var LOW_VOLT = 11.5;    // V — conservative low-voltage alert (tell me your battery chemistry to tune)
+  var DEF_CHANS = [['💡','Interior'],['🔆','Awning'],['🌀','Fan'],['🚰','Water pump'],['❄️','Fridge'],['🔌','Inverter'],['📡','Antenna'],['🛗','Slide-out'],['🔥','Heater'],['💡','Rock lights'],['🎺','Air horn'],['＋','Aux']];
+  var EMOJI_QUICK=['💡','🔦','☀️','🌙','⭐','🔥','❄️','💧','🌊','🚿','⚡','🔋','🔌','🔧','🛠️','🎺','📻','📡','🔊','🚗','🏕️','⛺','🎣','🏔️','🔑','🔒','🔓','🚨','⛽','🌡️','💨','🌀','🛞','🪟','🎵','📷','🖥️','🧊','🪣','＋'];
 
-  var logEl = document.getElementById('log');
-  function log(msg) {
-    var t = new Date().toLocaleTimeString();
-    logEl.textContent += '[' + t + '] ' + msg + '\n';
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-  window.addEventListener('error', function (e) { try { log('[ERROR] ' + e.message + ' @ ' + e.filename + ':' + e.lineno); } catch (x) {} });
-  window.addEventListener('unhandledrejection', function (e) { try { log('[REJECT] ' + ((e.reason && e.reason.message) || e.reason)); } catch (x) {} });
-  log('Dashboard version ' + DASHBOARD_VERSION + '. Drivers: victron v' + (window.__VICTRON_BLE_VERSION__ || '?') + ', junctek v' + (window.__JUNCTEK_BLE_VERSION__ || '?') + '.');
-
-  // ---- clock ----
-  function tick() {
-    var d = new Date();
-    var h = d.getHours(), m = d.getMinutes();
-    var ampm = h >= 12 ? 'PM' : 'AM'; var hh = h % 12; if (hh === 0) hh = 12;
-    document.getElementById('clock').textContent = hh + ':' + (m < 10 ? '0' + m : m) + ' ' + ampm;
-  }
-  tick(); setInterval(tick, 1000);
-
-  // ---- persisted state ----
-  function loadNames() {
-    try { var s = JSON.parse(localStorage.getItem('lc79_names')); if (s && s.length === CHANNEL_COUNT) return s; } catch (e) {}
-    return DEFAULT_NAMES.slice();
-  }
-  function saveNames(n) { try { localStorage.setItem('lc79_names', JSON.stringify(n)); } catch (e) {} }
-  var names = loadNames();
-  function loadGlyphs() {
-    try { var s = JSON.parse(localStorage.getItem('lc79_glyphs')); if (s && s.length === CHANNEL_COUNT) return s; } catch (e) {}
-    return GLYPHS.slice();
-  }
-  function saveGlyphs(g) { try { localStorage.setItem('lc79_glyphs', JSON.stringify(g)); } catch (e) {} }
-  var glyphs = loadGlyphs();
-  function loadCapacity() { var v = parseFloat(localStorage.getItem('lc79_capacity')); return (v && v > 0) ? v : BATTERY_AH; }
-  function saveCapacity(v) { try { localStorage.setItem('lc79_capacity', String(v)); } catch (e) {} }
-  var capacity = loadCapacity();
-  var lastV = null, lastJ = null, currentSoc = null;
-  var srcWas = { battery: false, switches: false };
-  var channelState = new Array(CHANNEL_COUNT); for (var i = 0; i < CHANNEL_COUNT; i++) channelState[i] = false;
-  var editMode = false;
-
-  var keyInput = document.getElementById('solarKey');
-  keyInput.value = localStorage.getItem('lc79_victron_key') || DEFAULT_KEY;
-  keyInput.addEventListener('change', function () { localStorage.setItem('lc79_victron_key', keyInput.value.trim()); });
-
-  // ---- connection helpers ----
-  function setConnBtn(id, state) {
-    var el = document.getElementById(id);
-    el.className = 'conn-btn' + (state === 'connected' ? ' connected' : state === 'connecting' ? ' connecting' : '');
-  }
-  function setDot(id, on) { document.getElementById(id).className = 'dot' + (on ? ' live' : ''); }
-  function setChip(id, txtId, on, label) {
-    document.getElementById(id).className = 'dot' + (on ? ' on' : '');
-    document.getElementById(txtId).textContent = label;
-  }
-  function refreshLiveTag() {
-    var any = solarOn || batteryOn || switchesOn;
-    document.getElementById('liveTag').textContent = any ? ' · Live' : ' · Standby';
-  }
-  var solarOn = false, batteryOn = false, switchesOn = false;
-
-  // ================= SOLAR (Victron) =================
-  var victron = null;
-  document.getElementById('connSolar').addEventListener('click', connectSolar);
-  async function connectSolar() {
-    var key = keyInput.value.trim();
-    if (!key) { log('Enter the Victron encryption key first.'); return; }
-    localStorage.setItem('lc79_victron_key', key);
-    try {
-      setConnBtn('connSolar', 'connecting');
-      victron = new VictronBLE({ encryptionKey: key });
-      victron.onReading(function (d) {
-        if (d.deviceType !== 'solar_charger') return;
-        solarOn = true; setConnBtn('connSolar', 'connected'); setDot('dotSolar', true);
-        setChip('chipSolar', 'chipSolarTxt', true, 'live'); refreshLiveTag();
-        document.getElementById('vSub').textContent = d.deviceStateName || 'Charging';
-        document.getElementById('vYield').textContent = d.yieldToday.toFixed(2);
-        document.getElementById('vPv').textContent = d.pvPower;
-        document.getElementById('vVolt').textContent = d.batteryVoltage.toFixed(2);
-        document.getElementById('vAmps').textContent = d.batteryCurrent.toFixed(1) + ' A';
-        document.getElementById('vCurrent').textContent = d.batteryCurrent.toFixed(1) + ' A';
-        document.getElementById('vLoad').textContent = d.loadCurrent.toFixed(1) + ' A';
-        document.getElementById('vFlow').className = 'line' + (d.pvPower > 0 ? ' active' : '');
-        var pill = document.getElementById('vStatePill'), dash = document.getElementById('vStateDash');
-        pill.style.display = 'inline-flex'; dash.style.display = 'none';
-        document.getElementById('vState').textContent = d.deviceStateName || '--';
-        lastV = d; updateNetFlow(); evalAlerts();
-      });
-      var name = await victron.addDevice();
-      log('Solar listening: ' + name);
-    } catch (err) {
-      log('Solar connect failed: ' + err.message); setConnBtn('connSolar', '');
-    }
-  }
-
-  // ================= BATTERY (JuncTek) =================
-  // Charge/discharge direction. A[2] is the device's direction flag, but its polarity isn't
-  // documented, so we self-calibrate from the remaining-Ah trend: when Ah clearly rises, the
-  // current flag value means "charging"; when it clearly falls, "discharging". One clear event
-  // teaches the whole (binary) mapping. Before that, assume a nonzero flag = charging.
-  var jDir = { chargeFlag: null, lastRemain: null, lastT: 0 };
-  function junctekDirection(r) {
-    var cur = r.current || 0;
-    var flag = (r.raw && r.raw.A && r.raw.A[2] != null) ? (r.raw.A[2] ? 1 : 0) : null;
-    var now = Date.now();
-    if (r.remainingAh != null && flag != null) {
-      if (jDir.lastRemain == null) { jDir.lastRemain = r.remainingAh; jDir.lastT = now; }
-      else if (now - jDir.lastT >= 3000) {
-        var delta = r.remainingAh - jDir.lastRemain;
-        if (delta > 0.005) jDir.chargeFlag = flag;            // Ah rising -> this flag = charging
-        else if (delta < -0.005) jDir.chargeFlag = (flag ? 0 : 1); // Ah falling -> other flag = charging
-        jDir.lastRemain = r.remainingAh; jDir.lastT = now;
-      }
-    }
-    if (cur < 0.05) return { state: 'idle', sign: '' };
-    var charging;
-    if (jDir.chargeFlag != null && flag != null) charging = (flag === jDir.chargeFlag);
-    else if (flag != null) charging = (flag === 1); // pre-calibration default
-    else charging = true;
-    return { state: charging ? 'charging' : 'discharging', sign: charging ? '+' : '-' };
-  }
-
-  var shunt = null;
-  document.getElementById('connBattery').addEventListener('click', connectBattery);
-  async function connectBattery() {
-    try {
-      setConnBtn('connBattery', 'connecting');
-      shunt = new JuncTekShunt({ batteryCapacityAh: capacity });
-      shunt.onConnectionChange(function (s) {
-        if (!s.connected) { batteryOn = false; setDot('dotBattery', false); setChip('chipBattery','chipBatteryTxt', false, 'reconnecting'); refreshLiveTag(); evalAlerts(); }
-      });
-      shunt.onReading(function (r) {
-        if (!r.connected) return;
-        batteryOn = true; srcWas.battery = true; setConnBtn('connBattery', 'connected'); setDot('dotBattery', true);
-        setChip('chipBattery', 'chipBatteryTxt', true, 'live'); refreshLiveTag();
-        renderBattery(r);
-      });
-      shunt.onRawFrame(function (f) {
-        if (f.letter !== 'A' || !f.values) return;
-        var html = '';
-        for (var i = 0; i < f.values.length; i++) html += 'A[' + i + '] = ' + f.values[i] + '\n';
-        document.getElementById('rawDump').textContent = html;
-      });
-      var name = await shunt.connect();
-      log('Battery connected: ' + name);
-    } catch (err) {
-      log('Battery connect failed: ' + err.message); setConnBtn('connBattery', '');
-    }
-  }
-
-  function setGauge(soc) {
-    soc = Math.max(0, Math.min(100, soc));
-    document.getElementById('socText').textContent = soc;
-    var arc = document.getElementById('gaugeArc');
-    arc.setAttribute('stroke-dashoffset', (GAUGE_C * (1 - soc / 100)).toFixed(1));
-    var color = soc > 50 ? '#4ADE9C' : soc > 20 ? '#D98E04' : '#E5484D';
-    arc.setAttribute('stroke', color);
-  }
-
-  function renderBattery(r) {
-    lastJ = r;
-    var dir = junctekDirection(r);
-    if (r.voltage != null) document.getElementById('jVolt').textContent = r.voltage.toFixed(2) + ' V';
-    if (r.current != null) {
-      var cEl = document.getElementById('jCurrent');
-      cEl.textContent = dir.sign + Math.abs(r.current).toFixed(2) + ' A';
-      cEl.className = 'v ' + dir.state;
-    }
-    if (r.power != null) document.getElementById('jPower').textContent = dir.sign + Math.abs(Math.round(r.power)) + ' W';
-    var sEl = document.getElementById('socState');
-    sEl.textContent = dir.state === 'charging' ? '⚡ Charging' : (dir.state === 'discharging' ? '▼ Discharging' : '— Idle');
-    sEl.className = 'gauge-state ' + dir.state;
-    if (r.remainingAh != null) document.getElementById('jRemain').textContent = r.remainingAh.toFixed(1) + ' Ah';
-    var soc = (capacity > 0 && r.remainingAh != null) ? Math.min(100, Math.floor(r.remainingAh / capacity * 100)) : (r.socPercent != null ? r.socPercent : null);
-    currentSoc = soc;
-    if (soc != null) setGauge(soc);
-    document.getElementById('jRuntime').textContent = fmtRuntime(r, dir);
-    updateNetFlow();
-    evalAlerts();
-  }
-
-  function fmtRuntime(r, dir) {
-    if (r.remainingAh == null || r.current == null) return '—';
-    var cur = Math.abs(r.current);
-    if (cur < 0.05) return '—';
-    var h, label;
-    if (dir.state === 'discharging') { h = r.remainingAh / cur; label = ' to empty'; }
-    else if (dir.state === 'charging') { var togo = capacity - r.remainingAh; if (togo <= 0) return 'Full'; h = togo / cur; label = ' to full'; }
-    else return '—';
-    if (h >= 1) return '~' + h.toFixed(1) + ' h' + label;
-    return '~' + Math.round(h * 60) + ' min' + label;
-  }
-
-  function updateNetFlow() {
-    var el = document.getElementById('jLoad');
-    if (!lastV || !lastJ) { el.textContent = '—'; return; }
-    var solarA = lastV.batteryCurrent || 0;
-    var d = junctekDirection(lastJ);
-    var sign = d.state === 'charging' ? 1 : (d.state === 'discharging' ? -1 : 0);
-    var battNetA = sign * Math.abs(lastJ.current || 0);
-    var loadA = solarA - battNetA; if (loadA < 0) loadA = 0;
-    el.textContent = '~' + loadA.toFixed(1) + ' A';
-  }
-
-  function evalAlerts() {
-    var alerts = [];
-    if (currentSoc != null && currentSoc < LOW_SOC) alerts.push('Battery low: ' + currentSoc + '%');
-    if (lastJ && lastJ.voltage != null && lastJ.voltage < LOW_VOLT) alerts.push('Low voltage: ' + lastJ.voltage.toFixed(2) + ' V');
-    if (srcWas.battery && !batteryOn) alerts.push('Battery offline');
-    if (srcWas.switches && !switchesOn) alerts.push('Switches offline');
-    var b = document.getElementById('alertBanner');
-    if (alerts.length) { b.textContent = '⚠ ' + alerts.join('   ·   '); b.style.display = 'block'; }
-    else { b.style.display = 'none'; b.textContent = ''; }
-  }
-
-  // ---- battery capacity editor (client-side; safe, no device write) ----
-  (function () {
-    var ci = document.getElementById('capInput'); if (ci) ci.value = capacity;
-    var cs = document.getElementById('capSave');
-    if (cs) cs.addEventListener('click', function () {
-      var v = parseFloat(document.getElementById('capInput').value);
-      if (v && v > 0) { capacity = v; saveCapacity(v); log('Battery capacity set to ' + v + ' Ah.'); if (lastJ) renderBattery(lastJ); }
-      else log('Enter a valid capacity in Ah.');
+  // ---- offline inline icon set (Lucide-style) ----
+  var ICONS={
+    zap:'<path d="M13 2 4 14h7l-1 8 10-12h-7z"/>',
+    moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>',
+    sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    'battery-charging':'<rect x="2" y="7" width="13" height="10" rx="2"/><path d="M22 11v2"/><path d="M9 9.5 6.5 13H9l-2.5 3.5"/>',
+    battery:'<rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/>',
+    'toggle-right':'<rect x="2" y="6" width="20" height="12" rx="6"/><circle cx="16" cy="12" r="3"/>',
+    'refresh-cw':'<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/>',
+    'key-round':'<circle cx="8" cy="12" r="5"/><path d="M12.5 11.5 22 2M19 5l2 2"/>',
+    copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    check:'<path d="M20 6 9 17l-5-5"/>',
+    'alert-triangle':'<path d="M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+    'trending-down':'<path d="M22 17 13.5 8.5 8.5 13.5 2 7"/><path d="M16 17h6v-6"/>',
+    'trending-up':'<path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    activity:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+    'plug-zap':'<path d="M9 2v6M15 2v6M7 8h10v3a5 5 0 0 1-10 0z M12 16v6"/>',
+    gauge:'<circle cx="12" cy="12" r="9"/><path d="M12 12 16 9"/>',
+    pencil:'<path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
+    power:'<path d="M12 2v9"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
+    'power-off':'<path d="M18.4 6.6a9 9 0 1 1-12.8 0"/><path d="M12 2v6"/><path d="M3 3l18 18"/>',
+    'chevron-right':'<path d="M9 6l6 6-6 6"/>',
+    fuel:'<path d="M3 22V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v18M2 22h12M6 8h4M14 9h2a2 2 0 0 1 2 2v6a1.5 1.5 0 0 0 3 0V9l-3-3"/>',
+    'circle-dashed':'<path d="M10.1 2.2a10 10 0 0 0-3.9 1.6M3.8 6.2A10 10 0 0 0 2.2 10M2.2 14a10 10 0 0 0 1.6 3.8M6.2 20.2A10 10 0 0 0 10 21.8M14 21.8a10 10 0 0 0 3.8-1.6M20.2 17.8A10 10 0 0 0 21.8 14M21.8 10a10 10 0 0 0-1.6-3.8M17.8 3.8A10 10 0 0 0 14 2.2"/>'
+  };
+  function renderIcons(root){
+    (root||document).querySelectorAll('[data-lucide]').forEach(function(el){
+      var n=el.getAttribute('data-lucide');
+      if(ICONS[n]) el.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="1em" height="1em">'+ICONS[n]+'</svg>';
     });
-  })();
+  }
 
-  // ---- MICTUNING master-power / status LED (experimental) ----
-  var masterOn = false;
-  document.getElementById('masterBtn').addEventListener('click', async function () {
-    if (!panel) { log('Connect the switch panel first.'); return; }
-    masterOn = !masterOn;
-    try { await panel.setMasterPower(masterOn); this.classList.toggle('on', masterOn); log('Master power (LED) -> ' + (masterOn ? 'ON' : 'OFF') + ' [experimental]'); }
-    catch (e) { log('Master power failed: ' + e.message); }
-  });
+  var logEl=document.getElementById('log');
+  function log(m){var t=new Date().toLocaleTimeString();logEl.textContent+='['+t+'] '+m+'\n';logEl.scrollTop=logEl.scrollHeight;}
+  window.addEventListener('error',function(e){try{log('[ERR] '+e.message);}catch(x){}});
+  window.addEventListener('unhandledrejection',function(e){try{log('[REJECT] '+((e.reason&&e.reason.message)||e.reason));}catch(x){}});
 
-  // ---- Connect all (one tap to start; OS still shows one picker per device) ----
-  document.getElementById('connectAll').addEventListener('click', async function () {
-    log('Connecting all — accept the device picker for each in turn.');
-    try { await connectSolar(); } catch (e) {}
-    try { await connectBattery(); } catch (e) {}
-    try { await connectSwitches(); } catch (e) {}
-  });
+  // ---- persistence ----
+  function ls(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+  function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+  function loadChans(){
+    var saved=null; try{saved=JSON.parse(ls('lc79_chans'));}catch(e){}
+    var out=[];
+    for(var i=0;i<CHANNEL_COUNT;i++){
+      var s=(saved&&saved[i])?saved[i]:null;
+      out.push([ s&&s[0]?s[0]:DEF_CHANS[i][0], s&&s[1]?s[1]:DEF_CHANS[i][1], 0 ]);
+    }
+    return out;
+  }
+  function saveChans(){lsSet('lc79_chans',JSON.stringify(chans.map(function(c){return [c[0],c[1]];})));}
+  var chans=loadChans();
+  var capacity=parseFloat(ls('lc79_capacity'))||BATTERY_AH;
+  var deviceKey=ls('lc79_victron_key')||DEFAULT_KEY;
 
-  // ---- probe whether silent on-load reconnect is possible in this browser ----
-  (async function probeReconnect() {
-    if (navigator.bluetooth && navigator.bluetooth.getDevices) {
-      try { var ds = await navigator.bluetooth.getDevices(); log('getDevices() supported — ' + ds.length + ' known device(s). Silent reconnect-on-load is feasible (next step).'); }
-      catch (e) { log('getDevices() present but errored: ' + e.message); }
-    } else { log('getDevices() not supported here — use "Connect all"; silent on-load reconnect unavailable.'); }
-  })();
+  function loadHist(k){try{var a=JSON.parse(ls(k));return Array.isArray(a)?a:[];}catch(e){return [];}}
+  function pruneHist(a){var cut=Date.now()-86400000;while(a.length&&a[0][0]<cut)a.shift();}
+  var socHist=loadHist('lc79_soc_hist'), solarHist=loadHist('lc79_solar_hist');
+  var lastSocT=0,lastSolarT=0,SAMPLE_MS=300000;
+  var VOLT=[],CURR=[],REM=[];
 
-  // ================= SWITCHES (MICTUNING) =================
-  var panel = null;
-  document.getElementById('connSwitches').addEventListener('click', connectSwitches);
-  async function connectSwitches() {
-    try {
-      setConnBtn('connSwitches', 'connecting');
-      panel = new MictuningPanel();
-      panel.onConnectionChange(function (s) {
-        if (s.connected) {
-          switchesOn = true; srcWas.switches = true; setConnBtn('connSwitches', 'connected'); setDot('dotSwitches', true);
-          setChip('chipSwitches', 'chipSwitchesTxt', true, 'live'); refreshLiveTag();
-          document.getElementById('mCount').textContent = countOn() + ' of 12 on'; evalAlerts();
-        } else {
-          switchesOn = false; setDot('dotSwitches', false); setChip('chipSwitches','chipSwitchesTxt', false, 'reconnecting'); refreshLiveTag(); evalAlerts();
-        }
-      });
-      // True-state sync: reflect the panel's real on/off state from its notify (best-effort).
-      panel.onStatus(function (st) {
-        if (!st || !st.connected || !st.channels || st.channels.length < CHANNEL_COUNT) return;
-        for (var i = 0; i < CHANNEL_COUNT; i++) channelState[i] = !!st.channels[i];
-        if (!editMode) renderGrid();
-        updateCount();
-        log('Panel state synced from device: ' + countOn() + ' on');
-      });
-      var name = await panel.connect();
-      try { await panel.requestStatus(); } catch (e) {}
-      log('Switches connected: ' + name);
-    } catch (err) {
-      log('Switches connect failed: ' + err.message); setConnBtn('connSwitches', '');
+  // ---- state ----
+  var lastV=null,lastJ=null,currentSoc=null,lastVictronUpdate=0,editMode=false,masterOn=false;
+  var solarOn=false,batteryOn=false,switchesOn=false,srcWas={battery:false,switches:false};
+
+  // ---- clock + freshness ----
+  function tick(){
+    var d=new Date(),h=d.getHours(),m=d.getMinutes(),ap=h>=12?'PM':'AM',hh=h%12||12;
+    document.getElementById('clk').textContent=hh+':'+(m<10?'0'+m:m)+' '+ap;
+    if(lastVictronUpdate){
+      var ago=Math.round((Date.now()-lastVictronUpdate)/1000),f=document.getElementById('solarFresh');
+      f.innerHTML=(ago<=3?'<span class="pulse"></span>live':ago+'s ago');
+      f.className='rt'+(ago>8?' stale':'');
     }
   }
-
-  function countOn() { var c = 0; for (var i = 0; i < CHANNEL_COUNT; i++) if (channelState[i]) c++; return c; }
-  function updateCount() {
-    if (switchesOn) document.getElementById('mCount').textContent = countOn() + ' of 12 on';
+  function refreshLive(){
+    var any=solarOn||batteryOn||switchesOn,t=document.getElementById('liveTag');
+    t.className='live'+(any?'':' standby');
+    document.getElementById('liveTxt').textContent=any?'live':'standby';
+    document.getElementById('subtitle').textContent='House systems · '+(any?'online':'standby');
   }
 
-  async function toggleChannel(idx) {
-    if (!panel) { log('Connect the switch panel first.'); return; }
-    var next = !channelState[idx];
-    try {
-      await panel.setChannel(idx, next);
-      channelState[idx] = next; renderGrid(); updateCount();
-      log('CH ' + (idx + 1) + ' (' + names[idx] + ') -> ' + (next ? 'ON' : 'OFF'));
-    } catch (err) { log('Toggle CH ' + (idx + 1) + ' failed: ' + err.message); }
+  // ---- connection ui helpers ----
+  function setConnBtn(id,s){document.getElementById(id).className='cbtn'+(s==='connected'?' on':s==='connecting'?' connecting':'')+(id==='connAll'?' allbtn':'');}
+  function setFootDot(id,on){document.getElementById(id).className='d'+(on?'':' off');}
+  function setSecFresh(id,on,txt){var e=document.getElementById(id);e.innerHTML=(on?'<span class="pulse"></span>':'')+(txt||(on?'live':'offline'));e.className='rt';}
+
+  // ================= SOLAR =================
+  var victron=null;
+  function connectSolar(){
+    if(!deviceKey){log('Set the Victron key first (tap the key row).');return Promise.resolve();}
+    setConnBtn('connSolar','connecting');
+    victron=new VictronBLE({encryptionKey:deviceKey});
+    victron.onDebug(function(m){ if(m.indexOf('MISMATCH')>=0||m.indexOf('error')>=0) log('[solar] '+m); });
+    victron.onReading(function(d){
+      if(d.deviceType!=='solar_charger')return;
+      solarOn=true;setConnBtn('connSolar','connected');setFootDot('fSolar',true);refreshLive();
+      lastVictronUpdate=Date.now();
+      document.getElementById('vYield').textContent=d.yieldToday.toFixed(2);
+      document.getElementById('vPv').textContent=d.pvPower;
+      document.getElementById('vVolt').textContent=d.batteryVoltage.toFixed(2);
+      document.getElementById('vCurrent').textContent=d.batteryCurrent.toFixed(1);
+      document.getElementById('vLoad').textContent=d.loadCurrent.toFixed(1);
+      document.getElementById('vState').textContent=d.deviceStateName||'--';
+      lastV=d;updateNetFlow();evalAlerts();sampleSolar(d.pvPower);
+    });
+    return victron.addDevice().then(function(n){log('Solar listening: '+n);},function(e){log('Solar failed: '+e.message);setConnBtn('connSolar','');});
   }
+  document.getElementById('connSolar').onclick=connectSolar;
 
-  document.getElementById('allOnBtn').addEventListener('click', async function () {
-    if (!panel) { log('Connect the switch panel first.'); return; }
-    try { await panel.setAll(true); for (var i = 0; i < CHANNEL_COUNT; i++) channelState[i] = true; renderGrid(); updateCount(); log('All channels ON'); }
-    catch (err) { log('All on failed: ' + err.message); }
-  });
-  document.getElementById('allOffBtn').addEventListener('click', async function () {
-    if (!panel) { log('Connect the switch panel first.'); return; }
-    try { await panel.setAll(false); for (var i = 0; i < CHANNEL_COUNT; i++) channelState[i] = false; renderGrid(); updateCount(); log('All channels OFF'); }
-    catch (err) { log('All off failed: ' + err.message); }
-  });
-
-  // ---- rename mode ----
-  document.getElementById('editNamesBtn').addEventListener('click', function () {
-    var btn = this;
-    if (!editMode) {
-      editMode = true; btn.textContent = 'Save'; btn.className = 'editing'; renderGrid();
-    } else {
-      // read name inputs
-      var inputs = document.querySelectorAll('#switchGrid input.nameedit');
-      for (var i = 0; i < inputs.length; i++) {
-        var idx = parseInt(inputs[i].getAttribute('data-idx'), 10);
-        var val = inputs[i].value.trim();
-        names[idx] = val || DEFAULT_NAMES[idx];
-      }
-      // read icon (emoji) inputs
-      var gInputs = document.querySelectorAll('#switchGrid input.glyphedit');
-      for (var g = 0; g < gInputs.length; g++) {
-        var gidx = parseInt(gInputs[g].getAttribute('data-idx'), 10);
-        var gval = gInputs[g].value.trim();
-        glyphs[gidx] = gval || GLYPHS[gidx];
-      }
-      saveNames(names); saveGlyphs(glyphs);
-      editMode = false; btn.textContent = 'Edit'; btn.className = ''; renderGrid();
-      log('Channel names + icons saved.');
+  // ================= BATTERY =================
+  var jDir={chargeFlag:null,lastRemain:null,lastT:0};
+  function junctekDir(r){
+    var cur=r.current||0,flag=(r.raw&&r.raw.A&&r.raw.A[2]!=null)?(r.raw.A[2]?1:0):null,now=Date.now();
+    if(r.remainingAh!=null&&flag!=null){
+      if(jDir.lastRemain==null){jDir.lastRemain=r.remainingAh;jDir.lastT=now;}
+      else if(now-jDir.lastT>=3000){var dl=r.remainingAh-jDir.lastRemain;if(dl>0.005)jDir.chargeFlag=flag;else if(dl<-0.005)jDir.chargeFlag=(flag?0:1);jDir.lastRemain=r.remainingAh;jDir.lastT=now;}
     }
-  });
-
-  // ---- render switch grid ----
-  function renderGrid() {
-    var grid = document.getElementById('switchGrid');
-    grid.innerHTML = '';
-    for (var i = 0; i < CHANNEL_COUNT; i++) {
-      var cell = document.createElement('div');
-      var on = channelState[i];
-      cell.className = 'switch-cell' + (on ? ' on' : '') + (editMode ? '' : (panel ? '' : ' disabled'));
-      var glyphHtml = editMode
-        ? '<input class="glyphedit" data-idx="' + i + '" value="' + escapeHtml(glyphs[i]) + '" maxlength="8" />'
-        : '<div class="glyph">' + escapeHtml(glyphs[i]) + '</div>';
-      var nameHtml = editMode
-        ? '<input class="nameedit" data-idx="' + i + '" value="' + escapeHtml(names[i]) + '" maxlength="16" />'
-        : '<div class="cname">' + escapeHtml(names[i]) + '</div>';
-      cell.innerHTML =
-        glyphHtml +
-        nameHtml +
-        '<div class="ch">CH ' + (i + 1) + '</div>' +
-        '<div class="toggle-track' + (on ? ' on' : '') + '"><div class="toggle-thumb"></div></div>';
-      if (!editMode) {
-        (function (idx) { cell.addEventListener('click', function () { toggleChannel(idx); }); })(i);
-      }
-      grid.appendChild(cell);
-    }
+    if(cur<0.05)return{state:'idle',sign:''};
+    var ch;if(jDir.chargeFlag!=null&&flag!=null)ch=(flag===jDir.chargeFlag);else if(flag!=null)ch=(flag===1);else ch=true;
+    return{state:ch?'charging':'discharging',sign:ch?'+':'-'};
   }
-  function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-  renderGrid();
+  var shunt=null;
+  function connectBattery(){
+    setConnBtn('connBattery','connecting');
+    shunt=new JuncTekShunt({batteryCapacityAh:capacity});
+    shunt.onConnectionChange(function(s){if(!s.connected){batteryOn=false;setFootDot('fBattery',false);refreshLive();evalAlerts();}});
+    shunt.onReading(function(r){
+      if(!r.connected)return;
+      batteryOn=true;srcWas.battery=true;setConnBtn('connBattery','connected');setFootDot('fBattery',true);refreshLive();
+      renderBattery(r);
+    });
+    shunt.onRawFrame(function(f){
+      if(f.letter!=='A'||!f.values)return;
+      var h='';for(var i=0;i<f.values.length;i++)h+='A['+i+'] = '+f.values[i]+'\n';
+      document.getElementById('rawDump').textContent=h;
+    });
+    return shunt.connect().then(function(n){log('Battery connected: '+n);},function(e){log('Battery failed: '+e.message);setConnBtn('connBattery','');});
+  }
+  document.getElementById('connBattery').onclick=connectBattery;
+
+  function renderBattery(r){
+    lastJ=r;var dir=junctekDir(r);
+    if(r.voltage!=null){document.getElementById('jVolt').textContent=r.voltage.toFixed(2);pushSpark(VOLT,r.voltage);}
+    if(r.current!=null){
+      document.getElementById('jCurrent').textContent=dir.sign+Math.abs(r.current).toFixed(2);
+      document.getElementById('jCurrentWrap').className='v '+(dir.state==='charging'?'green':'amber');
+      pushSpark(CURR,(dir.state==='discharging'?-1:1)*Math.abs(r.current));
+    }
+    var sc=document.getElementById('stateChip');
+    sc.className='chip '+dir.state;
+    document.getElementById('stateTxt').textContent=dir.state==='charging'?'Charging':dir.state==='discharging'?'Discharging':'Idle';
+    if(r.remainingAh!=null){document.getElementById('jRemain').textContent=r.remainingAh.toFixed(1);pushSpark(REM,r.remainingAh);}
+    var soc=(capacity>0&&r.remainingAh!=null)?Math.min(100,Math.floor(r.remainingAh/capacity*100)):(r.socPercent!=null?r.socPercent:null);
+    currentSoc=soc;
+    if(soc!=null){
+      document.getElementById('socText').textContent=soc;
+      var fl=document.getElementById('battFill');fl.style.width=soc+'%';
+      fl.style.background=soc>50?'var(--green)':soc>20?'var(--amber)':'var(--red)';
+      sampleSoc(soc);
+    }
+    document.getElementById('runtime').textContent=fmtRuntime(r,dir);
+    renderSparks();updateNetFlow();evalAlerts();
+  }
+  function fmtRuntime(r,dir){
+    if(r.remainingAh==null||r.current==null)return '--';
+    var cur=Math.abs(r.current);if(cur<0.05)return '--';
+    var h,lab;
+    if(dir.state==='discharging'){h=r.remainingAh/cur;lab=' to empty';}
+    else if(dir.state==='charging'){var tg=capacity-r.remainingAh;if(tg<=0)return 'Full';h=tg/cur;lab=' to full';}
+    else return '--';
+    return (h>=1?'~'+h.toFixed(1)+' h':'~'+Math.round(h*60)+' min')+lab;
+  }
+  function updateNetFlow(){
+    var el=document.getElementById('estLoad');
+    if(!lastV||!lastJ){el.textContent='--';return;}
+    var solarA=lastV.batteryCurrent||0,d=junctekDir(lastJ),sign=d.state==='charging'?1:d.state==='discharging'?-1:0;
+    var load=solarA-sign*Math.abs(lastJ.current||0);if(load<0)load=0;
+    el.textContent='~'+load.toFixed(1)+' A';
+  }
+  function evalAlerts(){
+    var a=[];
+    if(currentSoc!=null&&currentSoc<LOW_SOC)a.push('Battery low: '+currentSoc+'%');
+    if(lastJ&&lastJ.voltage!=null&&lastJ.voltage<LOW_VOLT)a.push('Low voltage: '+lastJ.voltage.toFixed(2)+' V');
+    if(srcWas.battery&&!batteryOn)a.push('Battery offline');
+    if(srcWas.switches&&!switchesOn)a.push('Switches offline');
+    var b=document.getElementById('alertBanner');
+    if(a.length){document.getElementById('alertTxt').textContent=a.join('  ·  ');b.style.display='flex';}
+    else b.style.display='none';
+  }
+
+  document.getElementById('capSave').onclick=function(){
+    var v=parseFloat(document.getElementById('capInput').value);
+    if(v&&v>0){capacity=v;lsSet('lc79_capacity',String(v));log('Capacity set to '+v+' Ah.');if(lastJ)renderBattery(lastJ);}
+  };
+
+  // ================= SWITCHES =================
+  var panel=null;
+  function connectSwitches(){
+    setConnBtn('connSwitches','connecting');
+    panel=new MictuningPanel();
+    panel.onConnectionChange(function(s){
+      if(s.connected){switchesOn=true;srcWas.switches=true;setConnBtn('connSwitches','connected');setFootDot('fSwitches',true);setSecFresh('swFresh',true);refreshLive();updateCount();evalAlerts();}
+      else{switchesOn=false;setFootDot('fSwitches',false);setSecFresh('swFresh',false);refreshLive();evalAlerts();}
+    });
+    panel.onStatus(function(st){
+      if(!st||!st.connected||!st.channels||st.channels.length<CHANNEL_COUNT)return;
+      for(var i=0;i<CHANNEL_COUNT;i++)chans[i][2]=st.channels[i]?1:0;
+      if(!editMode)draw();updateCount();
+    });
+    return panel.connect().then(function(n){try{panel.requestStatus();}catch(e){}log('Switches connected: '+n);},function(e){log('Switches failed: '+e.message);setConnBtn('connSwitches','');});
+  }
+  document.getElementById('connSwitches').onclick=connectSwitches;
+  function countOn(){var c=0;for(var i=0;i<CHANNEL_COUNT;i++)if(chans[i][2])c++;return c;}
+  function updateCount(){document.getElementById('cnt').textContent=switchesOn?(countOn()+' of 12 on'):'not connected';}
+
+  function toggleChannel(i){
+    if(!panel){log('Connect the switch panel first.');return;}
+    var next=chans[i][2]?0:1;
+    panel.setChannel(i,!!next).then(function(){chans[i][2]=next;draw();updateCount();log('CH '+(i+1)+' ('+chans[i][1]+') -> '+(next?'ON':'OFF'));},function(e){log('Toggle failed: '+e.message);});
+  }
+  document.getElementById('allOn').onclick=function(){if(!panel){log('Connect switches first.');return;}panel.setAll(true).then(function(){for(var i=0;i<CHANNEL_COUNT;i++)chans[i][2]=1;draw();updateCount();});};
+  document.getElementById('allOff').onclick=function(){if(!panel){log('Connect switches first.');return;}panel.setAll(false).then(function(){for(var i=0;i<CHANNEL_COUNT;i++)chans[i][2]=0;draw();updateCount();});};
+  document.getElementById('masterBtn').onclick=function(){if(!panel){log('Connect switches first.');return;}masterOn=!masterOn;this.classList.toggle('active',masterOn);panel.setMasterPower(masterOn).then(function(){log('Master LED -> '+(masterOn?'ON':'OFF')+' [experimental]');},function(e){log('LED failed: '+e.message);});};
+  document.getElementById('editBtn').onclick=function(){
+    if(editMode){var ins=document.querySelectorAll('#grid .nm-input');for(var k=0;k<ins.length;k++){var idx=+ins[k].getAttribute('data-i');chans[idx][1]=ins[k].value.trim()||DEF_CHANS[idx][1];}saveChans();}
+    editMode=!editMode;this.innerHTML=editMode?'<i data-lucide="check"></i>Done':'<i data-lucide="pencil"></i>Edit';this.classList.toggle('active',editMode);renderIcons(this);
+    document.getElementById('grid').classList.toggle('editMode',editMode);draw();
+  };
+
+  var grid=document.getElementById('grid');
+  function renderIcon(v){return /^[a-z][a-z0-9-]*$/.test(v)?'<i data-lucide="'+v+'"></i>':'<span>'+v+'</span>';}
+  function draw(){
+    grid.innerHTML='';
+    chans.forEach(function(c,i){
+      var d=document.createElement('div');
+      d.className='ch'+(c[2]?' on':'');
+      d.innerHTML='<div class="iconwrap"><div class="icn">'+renderIcon(c[0])+'</div><span class="editdot"><i data-lucide="pencil"></i></span></div>'+
+        (editMode?'<input class="nm-input" data-i="'+i+'" value="'+c[1].replace(/"/g,'&quot;')+'"/>':'<div class="nm">'+c[1]+'</div>')+
+        '<div class="chn">CH '+(i+1)+'</div><div class="stt">'+(c[2]?'ON':'OFF')+'</div>';
+      if(!editMode)d.onclick=function(){toggleChannel(i);};
+      var op=function(e){e.stopPropagation();openPicker(i);};
+      d.querySelector('.icn').onclick=op;d.querySelector('.editdot').onclick=op;
+      if(editMode){var inp=d.querySelector('.nm-input');inp.onclick=function(e){e.stopPropagation();};(function(x){inp.oninput=function(){chans[x][1]=this.value;};})(i);}
+      grid.appendChild(d);
+    });
+    updateCount();renderIcons(grid);
+  }
+
+  // ---- icon picker (emoji, offline) ----
+  var modal=document.getElementById('iconModal'),pickEl=document.getElementById('iconPick'),pickIdx=-1;
+  var emojiInput=document.getElementById('emojiInput'),emojiPreview=document.getElementById('emojiPreview');
+  function openPicker(i){
+    pickIdx=i;document.getElementById('iconSub').textContent='· '+chans[i][1]+' (CH '+(i+1)+')';
+    emojiInput.value='';emojiPreview.textContent=/^[a-z][a-z0-9-]*$/.test(chans[i][0])?'😀':chans[i][0];
+    var h='';EMOJI_QUICK.forEach(function(e){h+='<button data-ic="'+e+'" class="'+(e===chans[i][0]?'cur':'')+'">'+e+'</button>';});
+    pickEl.innerHTML=h;modal.hidden=false;
+  }
+  function closePicker(){modal.hidden=true;pickIdx=-1;}
+  document.getElementById('iconClose').onclick=closePicker;
+  modal.onclick=function(e){if(e.target===modal)closePicker();};
+  emojiInput.oninput=function(){var v=this.value.trim();if(v)emojiPreview.textContent=v;};
+  document.getElementById('emojiUse').onclick=function(){var v=emojiInput.value.trim();if(v&&pickIdx>=0){chans[pickIdx][0]=v;saveChans();closePicker();draw();}};
+  pickEl.onclick=function(e){var b=e.target.closest('button[data-ic]');if(!b||pickIdx<0)return;chans[pickIdx][0]=b.getAttribute('data-ic');saveChans();closePicker();draw();};
+
+  // ---- key row ----
+  function maskKey(k){return k?('device key · '+'•'.repeat(Math.max(0,k.length-4))+k.slice(-4)):'device key · tap to set';}
+  function refreshKey(){document.getElementById('apikey').textContent=maskKey(deviceKey);}
+  function startKeyEdit(){
+    var span=document.getElementById('apikey'),row=span.parentNode;
+    var inp=document.createElement('input');inp.className='kedit';inp.value=deviceKey;inp.placeholder='paste Victron key';
+    row.replaceChild(inp,span);inp.focus();
+    function done(){
+      deviceKey=inp.value.trim();lsSet('lc79_victron_key',deviceKey);
+      var s=document.createElement('span');s.className='kv';s.id='apikey';s.textContent=maskKey(deviceKey);s.onclick=startKeyEdit;
+      row.replaceChild(s,inp);log('Victron key saved.');
+    }
+    inp.onblur=done;inp.onkeydown=function(e){if(e.key==='Enter')inp.blur();};
+  }
+  document.getElementById('apikey').onclick=startKeyEdit;
+  document.getElementById('copyKey').onclick=function(){if(navigator.clipboard)navigator.clipboard.writeText(deviceKey);var b=this;b.innerHTML='<i data-lucide="check"></i>';renderIcons(b);setTimeout(function(){b.innerHTML='<i data-lucide="copy"></i>';renderIcons(b);},1400);};
+
+  // ---- connect all ----
+  document.getElementById('connAll').onclick=function(){
+    log('Connecting all — accept the picker for each in turn.');
+    connectSolar().then(function(){return connectBattery();}).then(function(){return connectSwitches();}).catch(function(){});
+  };
+
+  // ---- charts ----
+  function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+  function smoothPath(pts){if(pts.length<2)return '';var d='M '+pts[0].x.toFixed(1)+' '+pts[0].y.toFixed(1);for(var i=0;i<pts.length-1;i++){var p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||p2;var c1x=p1.x+(p2.x-p0.x)/6,c1y=p1.y+(p2.y-p0.y)/6,c2x=p2.x-(p3.x-p1.x)/6,c2y=p2.y-(p3.y-p1.y)/6;d+=' C '+c1x.toFixed(1)+' '+c1y.toFixed(1)+', '+c2x.toFixed(1)+' '+c2y.toFixed(1)+', '+p2.x.toFixed(1)+' '+p2.y.toFixed(1);}return d;}
+  function area(el,data,o){
+    if(!el)return;if(data.length<2){el.innerHTML='';return;}
+    var w=o.w,h=o.h,pad=o.pad||6,padB=o.padB||pad,min=o.min,max=o.max,n=data.length;
+    if(max-min<1e-6)max=min+1;
+    var X=function(i){return pad+i*(w-2*pad)/(n-1);},Y=function(v){return (h-padB)-(v-min)/(max-min)*(h-pad-padB);};
+    var pts=data.map(function(v,i){return{x:X(i),y:Y(v)};}),line=smoothPath(pts);
+    var fill=line+' L '+X(n-1).toFixed(1)+' '+h+' L '+X(0).toFixed(1)+' '+h+' Z',g=o.id+'-g';
+    var dot=o.dot?'<circle cx="'+X(n-1).toFixed(1)+'" cy="'+Y(data[n-1]).toFixed(1)+'" r="3.4" fill="'+o.stroke+'" stroke="'+cssVar('--card')+'" stroke-width="2"/>':'';
+    el.innerHTML='<defs><linearGradient id="'+g+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+o.stroke+'" stop-opacity="0.26"/><stop offset="1" stop-color="'+o.stroke+'" stop-opacity="0"/></linearGradient></defs><path d="'+fill+'" fill="url(#'+g+')"/><path d="'+line+'" fill="none" stroke="'+o.stroke+'" stroke-width="'+(o.sw||2)+'" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>'+dot;
+  }
+  function rangeOf(arr,pad){var v=arr.map(function(p){return p[1];}),mn=Math.min.apply(null,v),mx=Math.max.apply(null,v);return{min:mn-pad,max:mx+pad};}
+  function renderSocChart(){
+    var el=document.getElementById('socChart'),lbl=document.getElementById('socRange');
+    if(socHist.length<2){el.innerHTML='';lbl.textContent='collecting…';return;}
+    var v=socHist.map(function(p){return p[1];}),mn=Math.max(0,Math.min.apply(null,v)-5),mx=Math.min(100,Math.max.apply(null,v)+5);
+    area(el,v,{id:'soc',w:320,h:78,min:mn,max:mx,stroke:cssVar('--green'),dot:true,padB:4});
+    lbl.textContent=Math.min.apply(null,v)+'% → '+Math.max.apply(null,v)+'%';
+  }
+  function renderSolarChart(){
+    var el=document.getElementById('solarChart'),lbl=document.getElementById('solarRange');
+    if(solarHist.length<2){el.innerHTML='';lbl.textContent='collecting…';return;}
+    var v=solarHist.map(function(p){return p[1];}),mx=Math.max(50,Math.max.apply(null,v));
+    area(el,v,{id:'solar',w:320,h:70,min:0,max:mx*1.1,stroke:cssVar('--amber'),dot:false,padB:2});
+    lbl.textContent='peak '+Math.round(Math.max.apply(null,v))+' W';
+  }
+  function pushSpark(a,v){a.push(v);if(a.length>40)a.shift();}
+  function renderSparks(){
+    var sp={w:80,h:18,pad:1,padB:1,sw:1.6};
+    if(VOLT.length>=2)area(document.querySelector('[data-spark=volt]'),VOLT,Object.assign({id:'sv',stroke:cssVar('--green')},sp,rangeOf(VOLT.map(function(x){return[0,x];}),0.1)));
+    if(CURR.length>=2)area(document.querySelector('[data-spark=curr]'),CURR,Object.assign({id:'sc',stroke:cssVar('--amber')},sp,rangeOf(CURR.map(function(x){return[0,x];}),0.5)));
+    if(REM.length>=2)area(document.querySelector('[data-spark=rem]'),REM,Object.assign({id:'sr',stroke:cssVar('--blue')},sp,rangeOf(REM.map(function(x){return[0,x];}),1)));
+  }
+  function sampleSoc(soc){var n=Date.now();if(n-lastSocT<SAMPLE_MS)return;lastSocT=n;socHist.push([n,soc]);pruneHist(socHist);lsSet('lc79_soc_hist',JSON.stringify(socHist));renderSocChart();}
+  function sampleSolar(w){var n=Date.now();if(n-lastSolarT<SAMPLE_MS)return;lastSolarT=n;solarHist.push([n,w]);pruneHist(solarHist);lsSet('lc79_solar_hist',JSON.stringify(solarHist));renderSolarChart();}
+
+  // ---- theme ----
+  function syncTheme(){var dark=document.documentElement.getAttribute('data-theme')==='dark';var b=document.getElementById('themeBtn');b.innerHTML='<i data-lucide="'+(dark?'sun':'moon')+'"></i>';renderIcons(b);}
+  document.getElementById('themeBtn').onclick=function(){
+    var el=document.documentElement;el.classList.add('no-trans');
+    if(el.getAttribute('data-theme')==='dark'){el.removeAttribute('data-theme');lsSet('lc79-theme','light');}
+    else{el.setAttribute('data-theme','dark');lsSet('lc79-theme','dark');}
+    syncTheme();renderSocChart();renderSolarChart();renderSparks();
+    requestAnimationFrame(function(){requestAnimationFrame(function(){el.classList.remove('no-trans');});});
+  };
+
+  // ---- init ----
+  renderIcons();syncTheme();refreshKey();tick();setInterval(tick,1000);draw();renderSocChart();renderSolarChart();
+  log('Dashboard v'+DASHBOARD_VERSION+' · drivers victron v'+(window.__VICTRON_BLE_VERSION__||'?')+', junctek v'+(window.__JUNCTEK_BLE_VERSION__||'?')+'. Offline-ready.');
 </script>
 </body>
 </html>
