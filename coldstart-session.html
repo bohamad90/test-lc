@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>LC79 Cold Start Drive Session</title>
+<style>
+  body { font-family: -apple-system, monospace; background: #0d0d0d; color: #0f0; padding: 12px; font-size: 12px; }
+  h2 { font-size: 16px; margin-bottom: 4px; }
+  h3 { color: #ff0; margin-top: 18px; border-top: 1px solid #333; padding-top: 10px; font-size: 13px; }
+  button { font-size: 14px; padding: 9px 12px; margin: 3px 3px 8px 0; background: #1e1e1e; color: #0f0; border: 1px solid #0f0; border-radius: 8px; }
+  button:disabled { opacity: 0.35; }
+  button.danger { color: #f80; border-color: #f80; }
+  button.go { color: #0ff; border-color: #0ff; }
+  #status { padding: 8px; background: #1a1a1a; border-radius: 6px; margin-bottom: 8px; }
+  .err { color: #f55; }
+  .info { color: #aaa; }
+  .ok { color: #5f5; }
+  .warn { color: #fa0; font-size: 11px; }
+  table { width: 100%; font-size: 10px; border-collapse: collapse; margin-top: 6px; }
+  td, th { padding: 3px 4px; border-bottom: 1px solid #2a2a2a; text-align: left; vertical-align: top; white-space: nowrap; }
+  th { color: #888; position: sticky; top: 0; background: #0d0d0d; }
+  .pidcol { color: #0ff; font-weight: bold; }
+  .refcol { color: #ff0; }
+  .scrollbox { max-height: 320px; overflow: auto; border: 1px solid #2a2a2a; border-radius: 6px; }
+  select { background: #1a1a1a; color: #0f0; border: 1px solid #333; padding: 6px; margin-bottom: 8px; }
+  textarea { width: 100%; height: 200px; background: #1a1a1a; color: #0f0; border: 1px solid #0f0; border-radius: 8px; font-family: monospace; font-size: 10px; padding: 8px; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<h2>LC79 Cold Start Drive Session</h2>
+<div id="status" class="info">Not connected</div>
+
+<button id="connectBtn">1. Connect &amp; Init</button>
+<button id="modeInfoBtn" disabled>2. Probe Mode 09 + Mode 22 (one-shot)</button>
+<button id="startBtn" disabled>3. Start Cold-Start Logging</button>
+<button id="stopBtn" disabled>Stop Logging</button>
+<button id="driveBruteBtn" disabled class="go">4. Driving Brute-Force (2100-213C)</button>
+<button id="resetBtn" class="danger">Force Reset</button>
+<button id="exportBtn" disabled class="danger">Export All as Text</button>
+
+<div id="liveDebug" class="warn"></div>
+<div id="cycleInfo" class="info"></div>
+
+<h3>Mode 09 / Mode 22 Probe Results</h3>
+<div class="scrollbox" style="max-height:140px">
+  <table id="infoTable"><thead><tr><th>Query</th><th>Raw / Result</th></tr></thead><tbody></tbody></table>
+</div>
+
+<h3>Cold-Start Multi-PID Log</h3>
+<div class="scrollbox">
+  <table id="logTable">
+    <thead><tr id="logHeader"></tr></thead>
+    <tbody id="logBody"></tbody>
+  </table>
+</div>
+
+<h3>Driving Brute-Force Results (new/changed only)</h3>
+<div class="scrollbox" style="max-height:200px">
+  <table id="bruteTable"><thead><tr><th>PID</th><th>Raw</th></tr></thead><tbody></tbody></table>
+</div>
+
+<textarea id="exportBox" style="display:none"></textarea>
+
+<script>
+const FFF0_SERVICE = '0000fff0-0000-1000-8000-00805f9b34fb';
+const FFF1_NOTIFY   = '0000fff1-0000-1000-8000-00805f9b34fb';
+const FFF2_WRITE     = '0000fff2-0000-1000-8000-00805f9b34fb';
+
+let device, server, writeChar, notifyChar;
+let rxBuffer = '';
+let responseResolve = null;
+let scanBusy = false;
+let pollTimer = null;
+let cycleCount = 0;
+let allResults = [];
+
+const setStatus = (msg, cls) => {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls || 'info';
+};
+
+function lockButtons(lock) {
+  scanBusy = lock;
+  document.getElementById('modeInfoBtn').disabled = lock;
+  document.getElementById('startBtn').disabled = lock;
+  document.getElementById('driveBruteBtn').disabled = lock;
+}
+
+function handleNotify(event) {
+  const value = event.target.value;
+  const decoder = new TextDecoder('ascii');
+  const chunk = decoder.decode(value);
+  rxBuffer += chunk;
+  const dbg = document.getElementById('liveDebug');
+  if (dbg) dbg.textContent = 'last RX: ' + JSON.stringify(chunk);
+  if (rxBuffer.includes('>')) {
+    const fullResponse = rxBuffer;
+    rxBuffer = '';
+    if (responseResolve) {
+      responseResolve(fullResponse);
+      responseResolve = null;
+    }
+  }
+}
+
+function sendCommand(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 5000;
+  return new Promise(async (resolve, reject) => {
+    try {
+      rxBuffer = '';
+      const encoder = new TextEncoder();
+      const data = encoder.encode(cmd + '\r');
+      responseResolve = resolve;
+      await writeChar.writeValue(data);
+      setTimeout(() => {
+        if (responseResolve) {
+          responseResolve = null;
+          rxBuffer = '';
+          reject(new Error('Timeout: ' + cmd));
+        }
+      }, timeoutMs);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+async function sendFast(cmd, timeoutMs) {
+  timeoutMs = timeoutMs || 4000;
+  try {
+    return await sendCommand(cmd, timeoutMs);
+  } catch (err) {
+    try {
+      const encoder = new TextEncoder();
+      await writeChar.writeValue(encoder.encode('\r'));
+    } catch (e2) {}
+    await new Promise(r => setTimeout(r, 350));
+    rxBuffer = '';
+    responseResolve = null;
+    return 'TIMEOUT';
+  }
+}
+
+function cleanHex(raw) {
+  return raw.replace(/SEARCHING\.\.\.\r?/g, '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+}
+
+document.getElementById('connectBtn').addEventListener('click', async () => {
+  try {
+    setStatus('Requesting device...', 'info');
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [FFF0_SERVICE]
+    });
+    setStatus('Connecting...', 'info');
+    server = await device.gatt.connect();
+    const service = await server.getPrimaryService(FFF0_SERVICE);
+    writeChar = await service.getCharacteristic(FFF2_WRITE);
+    notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
+    await notifyChar.startNotifications();
+    notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
+
+    setStatus('Running init...', 'info');
+    await sendCommand('ATZ', 3000);
+    await new Promise(r => setTimeout(r, 1000));
+    await sendCommand('ATE0');
+    await sendCommand('ATL0');
+    await sendCommand('ATH1');
+    await sendCommand('ATS0');
+    await sendCommand('ATSP0');
+    await sendCommand('0100', 6000);
+
+    setStatus('Connected & initialized. Ready.', 'ok');
+    document.getElementById('modeInfoBtn').disabled = false;
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('driveBruteBtn').disabled = false;
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'err');
+    console.error(err);
+  }
+});
+
+function addInfoRow(label, value) {
+  const tbody = document.querySelector('#infoTable tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<td class="pidcol">' + label + '</td><td>' + value + '</td>';
+  tbody.appendChild(tr);
+}
+
+// ---------- MODE 09 + MODE 22 ONE-SHOT PROBE ----------
+document.getElementById('modeInfoBtn').addEventListener('click', async () => {
+  if (scanBusy) return;
+  lockButtons(true);
+  setStatus('Probing Mode 09 + Mode 22...', 'info');
+
+  // Mode 09 - vehicle info
+  const mode09Queries = [
+    { cmd: '0900', label: '0900 - Mode09 supported PIDs' },
+    { cmd: '0902', label: '0902 - VIN' },
+    { cmd: '0904', label: '0904 - Calibration ID' },
+    { cmd: '090A', label: '090A - ECU name' },
+  ];
+  for (const q of mode09Queries) {
+    const raw = await sendFast(q.cmd, 5000);
+    const hex = cleanHex(raw);
+    addInfoRow(q.label, hex || raw);
+    allResults.push({ section: 'mode09', cmd: q.cmd, raw: hex || raw });
+  }
+
+  // Mode 22 - probe a small representative sample first (full range would take too long blind)
+  // Try common low PIDs and a few matching our known Mode21 addresses, to see if Mode22 exists at all
+  const mode22Probe = ['2200', '2201', '2105', '2182', '2104'];
+  for (const pid of mode22Probe) {
+    const cmd = '22' + pid.substring(2);
+    const raw = await sendFast(cmd, 4000);
+    const hex = cleanHex(raw);
+    const supported = hex.includes('62' + pid.substring(2)) ? 'RESPONDED' : (raw === 'TIMEOUT' ? 'timeout' : 'no/negative');
+    addInfoRow(cmd + ' (Mode22 probe)', supported + ' :: ' + (hex || raw));
+    allResults.push({ section: 'mode22_probe', cmd, raw: hex || raw, supported });
+  }
+
+  setStatus('Mode 09 / Mode 22 probe complete.', 'ok');
+  lockButtons(false);
+  document.getElementById('exportBtn').disabled = false;
+});
+
+// ---------- COLD START MULTI-PID LOGGER ----------
+const MODE01_REF = ['0C', '0D', '11', '05', '0F'];
+const MODE21_PIDS = ['05','06','08','2A','2B','04'];
+const BIG_BLOCKS = ['10','11','12','13','14','15','16','17','18','19'];
+
+function buildHeader() {
+  const header = document.getElementById('logHeader');
+  let html = '<th>Time</th>';
+  for (const p of MODE01_REF) html += '<th class="refcol">01' + p + '</th>';
+  for (const p of MODE21_PIDS) html += '<th class="pidcol">21' + p + '</th>';
+  header.innerHTML = html;
+}
+
+function extractData(cmd, raw) {
+  const hex = cleanHex(raw);
+  const isMode01 = cmd.startsWith('01');
+  const respCode = (isMode01 ? '41' : '61') + cmd.substring(2);
+  const idx = hex.indexOf(respCode);
+  if (idx === -1) return raw === 'TIMEOUT' ? 'TIMEOUT' : 'no-match';
+  return hex.substring(idx + 4) || '(empty)';
+}
+
+async function runOneCycle() {
+  const row = {};
+  row['time'] = new Date().toLocaleTimeString();
+  for (const p of MODE01_REF) {
+    const cmd = '01' + p;
+    document.getElementById('cycleInfo').textContent = 'Cycle ' + cycleCount + ' | ' + cmd;
+    row['01'+p] = extractData(cmd, await sendFast(cmd));
+  }
+  for (const p of MODE21_PIDS) {
+    const cmd = '21' + p;
+    document.getElementById('cycleInfo').textContent = 'Cycle ' + cycleCount + ' | ' + cmd;
+    row['21'+p] = extractData(cmd, await sendFast(cmd));
+  }
+  return row;
+}
+
+function addLogRow(row) {
+  const tbody = document.getElementById('logBody');
+  const tr = document.createElement('tr');
+  let html = '<td>' + row['time'] + '</td>';
+  for (const p of MODE01_REF) html += '<td>' + (row['01'+p]||'') + '</td>';
+  for (const p of MODE21_PIDS) html += '<td>' + (row['21'+p]||'') + '</td>';
+  tr.innerHTML = html;
+  tbody.insertBefore(tr, tbody.firstChild);
+  allResults.push({ section: 'coldstart_cycle', cycle: cycleCount, row });
+}
+
+let loggingActive = false;
+async function loggingLoop() {
+  loggingActive = true;
+  while (loggingActive) {
+    cycleCount++;
+    const row = await runOneCycle();
+    addLogRow(row);
+    await new Promise(r => setTimeout(r, 800));
+  }
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  if (scanBusy) return;
+  buildHeader();
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('modeInfoBtn').disabled = true;
+  document.getElementById('driveBruteBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  setStatus('Cold-start logging active...', 'ok');
+  loggingLoop();
+});
+
+document.getElementById('stopBtn').addEventListener('click', () => {
+  loggingActive = false;
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('modeInfoBtn').disabled = false;
+  document.getElementById('driveBruteBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+  setStatus('Logging stopped. Ready for next step.', 'info');
+  document.getElementById('exportBtn').disabled = false;
+});
+
+// ---------- DRIVING BRUTE-FORCE (run while moving, single pass) ----------
+document.getElementById('driveBruteBtn').addEventListener('click', async () => {
+  if (scanBusy) return;
+  lockButtons(true);
+  document.querySelector('#bruteTable tbody').innerHTML = '';
+  setStatus('Driving brute-force in progress - keep driving normally...', 'ok');
+
+  const start = 0x00, end = 0x3C;
+  let found = 0;
+  for (let i = start; i <= end; i++) {
+    const pidHex = i.toString(16).toUpperCase().padStart(2,'0');
+    const cmd = '21' + pidHex;
+    document.getElementById('cycleInfo').textContent = 'Brute-force: ' + cmd + ' (' + (i+1) + '/' + (end+1) + ')';
+    const raw = await sendFast(cmd);
+    const hex = cleanHex(raw);
+    const respCode = '61' + pidHex;
+    if (hex.includes(respCode) && !hex.includes('7F21')) {
+      found++;
+      const tbody = document.querySelector('#bruteTable tbody');
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="pidcol">' + cmd + '</td><td>' + hex + '</td>';
+      tbody.appendChild(tr);
+      allResults.push({ section: 'drive_brute', cmd, raw: hex });
+    }
+    if (hex.length > 40) await new Promise(r => setTimeout(r, 500));
+  }
+  setStatus('Driving brute-force complete. ' + found + ' PIDs responded.', 'ok');
+  lockButtons(false);
+  document.getElementById('exportBtn').disabled = false;
+});
+
+// ---------- RESET ----------
+document.getElementById('resetBtn').addEventListener('click', () => {
+  loggingActive = false;
+  rxBuffer = '';
+  responseResolve = null;
+  lockButtons(false);
+  document.getElementById('stopBtn').disabled = true;
+  setStatus('Reset. State cleared.', 'warn');
+});
+
+// ---------- EXPORT ----------
+document.getElementById('exportBtn').addEventListener('click', () => {
+  let text = '=== LC79 Cold Start Drive Session ===\n';
+  text += 'Generated: ' + new Date().toString() + '\n\n';
+  for (const r of allResults) {
+    text += JSON.stringify(r) + '\n';
+  }
+  const box = document.getElementById('exportBox');
+  box.style.display = 'block';
+  box.value = text;
+  box.scrollIntoView({ behavior: 'smooth' });
+  box.focus();
+  box.select();
+  setStatus('Export ready below - Select All shown, just Copy.', 'ok');
+});
+</script>
+</body>
+</html>
