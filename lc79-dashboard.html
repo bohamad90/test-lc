@@ -459,10 +459,24 @@ async function sendGuarded(cmd) {
   return result;
 }
 
+let reconnectAttempts = 0;
 async function attemptReconnect() {
-  setStatusLine('Link stuck - reconnecting...');
+  reconnectAttempts++;
+  if (reconnectAttempts > 5) {
+    setConn('Disconnected', 'err');
+    setStatusLine('Too many reconnect attempts - tap Force Reset and reconnect manually.');
+    loggingActive = false;
+    return;
+  }
+  setStatusLine('Link stuck - reconnecting... (attempt ' + reconnectAttempts + ')');
   setConn('Reconnecting...', 'err');
   try {
+    // Remove the old notification listener before reconnecting - otherwise each
+    // reconnect stacks another listener on top, causing every incoming byte to be
+    // processed multiple times and corrupting rxBuffer almost immediately.
+    if (notifyChar) {
+      try { notifyChar.removeEventListener('characteristicvaluechanged', handleNotify); } catch (e) {}
+    }
     if (device && device.gatt && device.gatt.connected) device.gatt.disconnect();
     await new Promise(r => setTimeout(r, 1500));
     server = await device.gatt.connect();
@@ -471,8 +485,22 @@ async function attemptReconnect() {
     notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
     await notifyChar.startNotifications();
     notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
-    await sendCommand('ATE0', 4000);
+
+    // Full re-init, matching the original Connect flow - a fresh GATT connection
+    // needs the complete ELM327 setup, not just echo-off.
+    rxBuffer = ''; responseResolve = null;
+    await sendCommand('ATZ', 3000);
+    await new Promise(r => setTimeout(r, 1000));
+    await sendCommand('ATE0');
+    await sendCommand('ATL0');
+    await sendCommand('ATH1');
+    await sendCommand('ATS0');
+    await sendCommand('ATSP0');
+    await sendCommand('0100', 6000);
+
     consecutiveWatchdogFires = 0;
+    reconnectAttempts = 0;
+    lastActivityTime = Date.now();
     setConn('Live', 'live');
     setStatusLine('Reconnected.');
   } catch (err) {
@@ -646,7 +674,7 @@ document.getElementById('testBtn').addEventListener('click', async () => {
 
 document.getElementById('resetBtn').addEventListener('click', () => {
   loggingActive = false;
-  rxBuffer = ''; responseResolve = null; consecutiveWatchdogFires = 0;
+  rxBuffer = ''; responseResolve = null; consecutiveWatchdogFires = 0; reconnectAttempts = 0;
   document.getElementById('startBtn').disabled = false;
   document.getElementById('stopBtn').disabled = true;
   document.getElementById('connectBtn').disabled = false;
