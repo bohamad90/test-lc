@@ -240,6 +240,15 @@ const MODE01_PIDS = [
   { pid: '49', name: 'Accelerator Pedal Pos D', decode: b => (parseInt(b[0],16)/255*100).toFixed(1) + '%' },
   { pid: '5C', name: 'Engine Oil Temp', decode: b => (parseInt(b[0],16)-40) + ' C' },
   { pid: '5E', name: 'Fuel Rate', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))/20).toFixed(2) + ' L/h' },
+  { pid: '3C', name: 'Catalyst Temp B1S1', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))/10 - 40).toFixed(1) + ' C' },
+  { pid: '3D', name: 'Catalyst Temp B2S1', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))/10 - 40).toFixed(1) + ' C' },
+  { pid: '3E', name: 'Catalyst Temp B1S2', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))/10 - 40).toFixed(1) + ' C' },
+  { pid: '3F', name: 'Catalyst Temp B2S2', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))/10 - 40).toFixed(1) + ' C' },
+  { pid: '44', name: 'Fuel/Air Commanded Equiv Ratio', decode: b => (((parseInt(b[0],16)*256)+parseInt(b[1],16))/32768).toFixed(2) },
+  { pid: '45', name: 'Relative Throttle Position', decode: b => (parseInt(b[0],16)/255*100).toFixed(1) + '%' },
+  { pid: '47', name: 'Absolute Throttle Position B', decode: b => (parseInt(b[0],16)/255*100).toFixed(1) + '%' },
+  { pid: '4A', name: 'Accelerator Pedal Pos E', decode: b => (parseInt(b[0],16)/255*100).toFixed(1) + '%' },
+  { pid: '4C', name: 'Commanded Throttle Actuator', decode: b => (parseInt(b[0],16)/255*100).toFixed(1) + '%' },
 ];
 
 function addRow(tableId, pid, name, raw, decoded) {
@@ -277,9 +286,9 @@ document.getElementById('mode01Btn').addEventListener('click', async () => {
     const raw = await sendWithRetry(q, 5000);
     const hex = cleanHex(raw);
     const idx = hex.indexOf('41' + q.substring(2));
-    if (idx === -1) break; // not supported / chain ends
+    if (idx === -1) continue; // this range not supported, but keep checking others
     const dataHex = hex.substring(idx+4, idx+4+8);
-    if (dataHex.length < 8) break;
+    if (dataHex.length < 8) continue;
     const base = parseInt(q.substring(2), 16);
     const bits = parseInt(dataHex, 16);
     for (let i = 0; i < 32; i++) {
@@ -442,14 +451,38 @@ document.getElementById('exportBtn').addEventListener('click', () => {
     if (r.decoded) text += '  decoded: ' + r.decoded + '\n';
     text += '\n';
   }
-  const blob = new Blob([text], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'lc79_obd2_scan_' + Date.now() + '.txt';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+
+  // iOS/Bluefy doesn't reliably trigger <a download> clicks, so instead
+  // show the text in a selectable textarea the user can copy directly.
+  let exportBox = document.getElementById('exportBox');
+  if (!exportBox) {
+    exportBox = document.createElement('textarea');
+    exportBox.id = 'exportBox';
+    exportBox.style.width = '100%';
+    exportBox.style.height = '300px';
+    exportBox.style.marginTop = '10px';
+    exportBox.style.background = '#1a1a1a';
+    exportBox.style.color = '#0f0';
+    exportBox.style.border = '1px solid #0f0';
+    exportBox.style.borderRadius = '8px';
+    exportBox.style.fontFamily = 'monospace';
+    exportBox.style.fontSize = '11px';
+    exportBox.style.padding = '8px';
+    document.body.appendChild(exportBox);
+
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = 'Select All Text Above (then Copy)';
+    copyBtn.style.marginTop = '8px';
+    copyBtn.onclick = () => {
+      exportBox.focus();
+      exportBox.select();
+      setStatus('Text selected - use Copy from the iOS menu.', 'ok');
+    };
+    document.body.appendChild(copyBtn);
+  }
+  exportBox.value = text;
+  exportBox.scrollIntoView({ behavior: 'smooth' });
+  setStatus('Export ready below - tap inside the box, Select All, then Copy.', 'ok');
 });
 </script>
 </body>
