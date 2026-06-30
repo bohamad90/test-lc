@@ -460,6 +460,15 @@ async function sendGuarded(cmd) {
   return result;
 }
 
+let reconnectInProgress = false;
+
+function onUnexpectedDisconnect() {
+  if (reconnectInProgress) return; // we caused this ourselves mid-reconnect, ignore
+  setConn('Disconnected', 'err');
+  setStatusLine('Native BLE disconnect detected - reconnecting...');
+  attemptReconnect({ source: 'gattserverdisconnected', pid: 'n/a', name: 'native disconnect', raw: 'n/a' });
+}
+
 let reconnectAttempts = 0;
 let reconnectLog = [];
 async function attemptReconnect(triggerInfo) {
@@ -482,6 +491,7 @@ async function attemptReconnect(triggerInfo) {
   }
   setStatusLine('Link stuck - reconnecting... (attempt ' + reconnectAttempts + ')');
   setConn('Reconnecting...', 'err');
+  reconnectInProgress = true;
   try {
     // Remove the old notification listener before reconnecting - otherwise each
     // reconnect stacks another listener on top, causing every incoming byte to be
@@ -491,7 +501,15 @@ async function attemptReconnect(triggerInfo) {
     }
     if (device && device.gatt && device.gatt.connected) device.gatt.disconnect();
     await new Promise(r => setTimeout(r, 1500));
-    server = await device.gatt.connect();
+
+    // gatt.connect() has NO built-in timeout - if the OS Bluetooth stack is in a
+    // bad state (e.g. after a native-level disconnect), this can hang forever with
+    // no error and no resolution. Race it against a hard deadline so we always
+    // either succeed or fail within a bounded time, instead of freezing silently.
+    server = await Promise.race([
+      device.gatt.connect(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('gatt.connect() timed out')), 8000))
+    ]);
     const service = await server.getPrimaryService(FFF0_SERVICE);
     writeChar = await service.getCharacteristic(FFF2_WRITE);
     notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
@@ -518,6 +536,8 @@ async function attemptReconnect(triggerInfo) {
   } catch (err) {
     setConn('Disconnected', 'err');
     setStatusLine('Reconnect failed: ' + err.message);
+  } finally {
+    reconnectInProgress = false;
   }
 }
 
@@ -544,6 +564,7 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
   try {
     setConn('Requesting device...', '');
     device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [FFF0_SERVICE] });
+    device.addEventListener('gattserverdisconnected', onUnexpectedDisconnect);
     setConn('Connecting...', '');
     server = await device.gatt.connect();
     const service = await server.getPrimaryService(FFF0_SERVICE);
