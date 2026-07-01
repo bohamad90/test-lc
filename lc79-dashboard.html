@@ -66,7 +66,7 @@
   <div class="htop">
     <div>
       <div class="vid">LC79 <span class="ac">DIAG</span></div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--amber);letter-spacing:.06em;margin-top:2px;">VERSION 6</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--amber);letter-spacing:.06em;margin-top:2px;">VERSION 7</div>
       <div class="vmeta">2024 LAND CRUISER 79 &middot; 1GR-FE V6 &middot; A/T 6-SPD &middot; VEEPEAK OBDCHECK BLE</div>
     </div>
     <div class="cstat"><span class="cdot" id="cd"></span><span id="ct">Not connected</span></div>
@@ -99,6 +99,7 @@
   </div>
   <textarea id="logbox" readonly style="width:100%;height:180px;background:var(--bg-panel);color:#7FBB8A;border:1px solid var(--line);border-radius:8px;font-family:monospace;font-size:10px;padding:8px;resize:vertical;"></textarea>
 </div>
+<div id="grid-engine" class="section"></div>
 <div id="grid-trans" class="section"></div>
 <div id="grid-emissions" class="section"></div>
 <div id="grid-throttle" class="section"></div>
@@ -302,6 +303,7 @@ const GROUPS = {
 function buildUI() {
   for (const [grp, cfg] of Object.entries(GROUPS)) {
     const wrap = $('grid-' + grp);
+    if (!wrap) { dbg('ERROR: missing #grid-' + grp + ' in HTML'); continue; }
     wrap.className = 'section';
     wrap.innerHTML =
       '<div class="sh"><div class="' + cfg.dot + '"></div>' +
@@ -311,6 +313,7 @@ function buildUI() {
   }
   for (const g of GAUGES) {
     const gg = $('gg-' + g.group);
+    if (!gg) { dbg('ERROR: missing #gg-' + g.group + ' for gauge ' + g.id); continue; }
     const card = document.createElement('div');
     card.className = 'gc' + (g.group === 'experimental' ? ' exp' : '');
     card.innerHTML =
