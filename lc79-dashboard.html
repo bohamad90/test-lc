@@ -66,7 +66,7 @@
   <div class="htop">
     <div>
       <div class="vid">LC79 <span class="ac">DIAG</span></div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--amber);letter-spacing:.06em;margin-top:2px;">VERSION 9</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--amber);letter-spacing:.06em;margin-top:2px;">VERSION 11</div>
       <div class="vmeta">2024 LAND CRUISER 79 &middot; 1GR-FE V6 &middot; A/T 6-SPD &middot; VEEPEAK OBDCHECK BLE</div>
     </div>
     <div class="cstat"><span class="cdot" id="cd"></span><span id="ct">Not connected</span></div>
@@ -91,14 +91,6 @@
   <div id="tr"></div>
 </div>
 
-<!-- LOG BOX -->
-<div style="max-width:1040px;margin:0 auto 20px;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-    <div class="lf" style="font-size:12px;font-weight:600;">Debug Log</div>
-    <button onclick="document.getElementById('logbox').value=''" style="padding:4px 10px;font-size:11px;">Clear</button>
-  </div>
-  <textarea id="logbox" readonly style="width:100%;height:180px;background:var(--bg-panel);color:#7FBB8A;border:1px solid var(--line);border-radius:8px;font-family:monospace;font-size:10px;padding:8px;resize:vertical;"></textarea>
-</div>
 <div id="grid-engine" class="section"></div>
 <div id="grid-trans" class="section"></div>
 <div id="grid-emissions" class="section"></div>
@@ -114,17 +106,6 @@ const W_CH = '0000fff2-0000-1000-8000-00805f9b34fb';
 let device, server, wChar, nChar;
 let rxBuf = '', resolveFn = null, looping = false;
 
-let logCount = 0;
-function dbg(msg) {
-  const box = document.getElementById('logbox');
-  if (!box) return;
-  const t = new Date().toLocaleTimeString();
-  box.value = '[' + t + '] ' + msg + '\n' + box.value;
-  // keep last 80 lines
-  const lines = box.value.split('\n');
-  if (lines.length > 80) box.value = lines.slice(0, 80).join('\n');
-}
-
 const $ = id => document.getElementById(id);
 const setConn = (t,c) => { $('ct').textContent=t; $('cd').className='cdot '+(c||''); };
 const setSL = t => $('sl').textContent = t;
@@ -133,7 +114,7 @@ const setSL = t => $('sl').textContent = t;
 function onNotify(evt) {
   const chunk = new TextDecoder('ascii').decode(evt.target.value);
   rxBuf += chunk;
-  if (chunk.includes('>')) dbg('RX> ' + JSON.stringify(rxBuf.trim().substring(0,60)));
+
   if (rxBuf.includes('>')) {
     const r = rxBuf; rxBuf = '';
     if (resolveFn) { resolveFn(r); resolveFn = null; }
@@ -145,7 +126,6 @@ function send(cmd, ms) {
   return new Promise(async (resolve, reject) => {
     rxBuf = '';
     resolveFn = resolve;
-    dbg('TX> ' + cmd);
     try {
       // Race the write itself against a short deadline - on iOS/Bluefy, writeValue()
       // can return a promise that never resolves after rapid back-to-back writes,
@@ -156,14 +136,12 @@ function send(cmd, ms) {
       ]);
     } catch(e) {
       resolveFn = null; rxBuf = '';
-      dbg('TX ERR: ' + e.message);
       reject(e);
       return;
     }
     setTimeout(() => {
       if (resolveFn) {
         resolveFn = null; rxBuf = '';
-        dbg('TIMEOUT> ' + cmd);
         reject(new Error('Timeout'));
       }
     }, ms);
@@ -173,8 +151,7 @@ function send(cmd, ms) {
 async function sendSafe(cmd) {
   try { return await send(cmd, 5000); }
   catch(e) {
-    dbg('SAFE-TIMEOUT> ' + cmd + ' — sending abort CR');
-    try { await wChar.writeValue(new TextEncoder().encode('\r')); } catch(e2){ dbg('ABORT ERR: ' + e2.message); }
+    try { await wChar.writeValue(new TextEncoder().encode('\r')); } catch(e2){ }
     await new Promise(r => setTimeout(r, 300));
     rxBuf = ''; resolveFn = null;
     return 'TIMEOUT';
@@ -211,7 +188,6 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
 
     // Detect native OS-level disconnects and inform user cleanly
     device.addEventListener('gattserverdisconnected', () => {
-      dbg('*** NATIVE BLE DISCONNECT *** looping was: ' + looping);
       looping = false;
       setConn('Disconnected', 'err');
       setSL('BLE disconnected. Tap Connect to reconnect.');
@@ -313,7 +289,7 @@ const GROUPS = {
 function buildUI() {
   for (const [grp, cfg] of Object.entries(GROUPS)) {
     const wrap = $('grid-' + grp);
-    if (!wrap) { dbg('ERROR: missing #grid-' + grp + ' in HTML'); continue; }
+    if (!wrap) { continue; }
     wrap.className = 'section';
     wrap.innerHTML =
       '<div class="sh"><div class="' + cfg.dot + '"></div>' +
@@ -323,7 +299,7 @@ function buildUI() {
   }
   for (const g of GAUGES) {
     const gg = $('gg-' + g.group);
-    if (!gg) { dbg('ERROR: missing #gg-' + g.group + ' for gauge ' + g.id); continue; }
+    if (!gg) { continue; }
     const card = document.createElement('div');
     card.className = 'gc' + (g.group === 'experimental' ? ' exp' : '');
     card.innerHTML =
@@ -360,25 +336,23 @@ function setGauge(g, val) {
 // ---------- LIVE READINGS ----------
 // ---------- LIVE READINGS - TWO TIER ----------
 // Priority gauges refresh every cycle (~2-3s), background gauges fill in between.
-const PRIORITY_IDS = ['rpm','spd','cool','thr','tpan','tcon'];
+const PRIORITY_IDS = ['rpm','spd','cool','tpan','tcon'];
 const PRIORITY = GAUGES.filter(g => PRIORITY_IDS.includes(g.id));
 const BACKGROUND = GAUGES.filter(g => !PRIORITY_IDS.includes(g.id));
 
 async function liveLoop() {
   looping = true;
   let bgIndex = 0;
-  let cycle = 0;
-  const GAP = 400;
+  const FAST_GAP = 150;
+  const SLOW_GAP = 500;
 
   while (looping) {
-    cycle++;
-    dbg('--- CYCLE ' + cycle + ' START (looping=' + looping + ') ---');
     for (const g of PRIORITY) {
-      if (!looping) { dbg('LOOP EXIT mid-priority'); break; }
+      if (!looping) break;
       setSL(g.pid + ' · ' + g.name);
       const raw = await sendSafe(g.pid);
       setGauge(g, decode(g, raw));
-      await new Promise(r => setTimeout(r, GAP));
+      await new Promise(r => setTimeout(r, FAST_GAP));
     }
     if (looping && BACKGROUND.length > 0) {
       const g = BACKGROUND[bgIndex % BACKGROUND.length];
@@ -386,11 +360,9 @@ async function liveLoop() {
       setSL(g.pid + ' · ' + g.name);
       const raw = await sendSafe(g.pid);
       setGauge(g, decode(g, raw));
-      await new Promise(r => setTimeout(r, GAP));
+      await new Promise(r => setTimeout(r, SLOW_GAP));
     }
-    if (looping) dbg('--- CYCLE ' + cycle + ' END ---');
   }
-  dbg('LOOP STOPPED (looping=false)');
 }
 
 $('startBtn').addEventListener('click', async () => {
