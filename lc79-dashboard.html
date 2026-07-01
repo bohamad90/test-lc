@@ -66,7 +66,7 @@
   <div class="htop">
     <div>
       <div class="vid">LC79 <span class="ac">DIAG</span></div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--amber);letter-spacing:.06em;margin-top:2px;">VERSION 7</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--amber);letter-spacing:.06em;margin-top:2px;">VERSION 8</div>
       <div class="vmeta">2024 LAND CRUISER 79 &middot; 1GR-FE V6 &middot; A/T 6-SPD &middot; VEEPEAK OBDCHECK BLE</div>
     </div>
     <div class="cstat"><span class="cdot" id="cd"></span><span id="ct">Not connected</span></div>
@@ -146,8 +146,20 @@ function send(cmd, ms) {
     rxBuf = '';
     resolveFn = resolve;
     dbg('TX> ' + cmd);
-    try { await wChar.writeValue(new TextEncoder().encode(cmd + '\r')); }
-    catch(e) { dbg('TX ERR: ' + e.message); reject(e); return; }
+    try {
+      // Race the write itself against a short deadline - on iOS/Bluefy, writeValue()
+      // can return a promise that never resolves after rapid back-to-back writes,
+      // which blocks the JS event loop and prevents even setTimeout from firing.
+      await Promise.race([
+        wChar.writeValue(new TextEncoder().encode(cmd + '\r')),
+        new Promise((_, rj) => setTimeout(() => rj(new Error('write hang')), 3000))
+      ]);
+    } catch(e) {
+      resolveFn = null; rxBuf = '';
+      dbg('TX ERR: ' + e.message);
+      reject(e);
+      return;
+    }
     setTimeout(() => {
       if (resolveFn) {
         resolveFn = null; rxBuf = '';
@@ -358,7 +370,7 @@ async function liveLoop() {
   looping = true;
   let bgIndex = 0;
   let cycle = 0;
-  const GAP = 200;
+  const GAP = 400;
 
   while (looping) {
     cycle++;
