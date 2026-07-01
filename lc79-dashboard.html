@@ -8,705 +8,398 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0B0D0C;
-    --bg-panel: #141715;
-    --bg-panel-raised: #181C19;
-    --ink: #F5F1E8;
-    --ink-dim: #8C9189;
-    --amber: #FF6A00;
-    --amber-dim: #7A3C12;
-    --confirmed: #3FA796;
-    --confirmed-dim: #1E4F47;
-    --muted: #5A5F5C;
-    --line: #232722;
-    --danger: #D14B3F;
+    --bg: #0B0D0C; --bg-panel: #141715; --bg-panel-raised: #181C19;
+    --ink: #F5F1E8; --ink-dim: #8C9189; --amber: #FF6A00; --amber-dim: #7A3C12;
+    --confirmed: #3FA796; --confirmed-dim: #1E4F47; --muted: #5A5F5C;
+    --line: #232722; --danger: #D14B3F;
   }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    background: var(--bg);
-    color: var(--ink);
-    font-family: 'JetBrains Mono', monospace;
-    min-height: 100vh;
-    padding: 18px 14px 60px;
-    -webkit-font-smoothing: antialiased;
-  }
-
-  .label-font {
-    font-family: 'Barlow Condensed', sans-serif;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  /* ===== HEADER ===== */
-  header {
-    max-width: 1040px;
-    margin: 0 auto 18px;
-  }
-  .header-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 4px;
-  }
-  .vehicle-id {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-weight: 700;
-    font-size: clamp(26px, 5vw, 36px);
-    letter-spacing: 0.02em;
-    line-height: 1;
-  }
-  .vehicle-id .accent { color: var(--amber); }
-  .vehicle-meta {
-    font-size: 10.5px;
-    color: var(--ink-dim);
-    letter-spacing: 0.04em;
-  }
-  .conn-status {
-    text-align: right;
-    font-size: 11px;
-  }
-  .conn-dot {
-    display: inline-block;
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--muted);
-    margin-right: 6px;
-  }
-  .conn-dot.live { background: var(--confirmed); box-shadow: 0 0 6px var(--confirmed); }
-  .conn-dot.err { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
-
-  /* ===== CONTROLS ===== */
-  .controls {
-    max-width: 1040px;
-    margin: 0 auto 18px;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  button {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    font-size: 13px;
-    padding: 10px 16px;
-    background: var(--bg-panel);
-    color: var(--ink);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-  }
-  button.primary { border-color: var(--confirmed-dim); color: var(--confirmed); }
-  button.primary:disabled { opacity: 0.35; }
-  button:disabled { opacity: 0.35; }
-  button.danger { border-color: #5a2620; color: var(--danger); }
-  #statusLine {
-    font-size: 11px;
-    color: var(--ink-dim);
-    margin-left: 4px;
-    align-self: center;
-  }
-
-  /* ===== SECTION ===== */
-  .section { max-width: 1040px; margin: 0 auto 28px; }
-  .section-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--line);
-  }
-  .section-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--confirmed); box-shadow: 0 0 8px var(--confirmed); }
-  .section-dot.exp { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
-  .section-title {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-weight: 600;
-    font-size: 14px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-  .section-sub { font-size: 10.5px; color: var(--ink-dim); margin-left: auto; }
-
-  /* ===== GAUGE GRID ===== */
-  .gauge-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-    gap: 12px;
-  }
-  .gauge-card {
-    background: var(--bg-panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 14px;
-    position: relative;
-    overflow: hidden;
-  }
-  .gauge-card.exp { border-color: var(--amber-dim); }
-  .gauge-pid { font-size: 9.5px; color: var(--ink-dim); letter-spacing: 0.08em; margin-bottom: 2px; }
-  .gauge-pid .code { color: var(--confirmed); }
-  .gauge-card.exp .gauge-pid .code { color: var(--amber); }
-  .gauge-name {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: var(--ink);
-    margin-bottom: 10px;
-    min-height: 28px;
-  }
-  .gauge-reading { display: flex; align-items: baseline; gap: 5px; }
-  .gauge-value {
-    font-size: 28px;
-    font-weight: 700;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-  }
-  .gauge-value.stale { color: var(--muted); }
-  .gauge-unit { font-size: 12px; color: var(--ink-dim); }
-
-  /* ===== DEBUG / EXPORT ===== */
-  #liveDebug { font-size: 10px; color: var(--amber); max-width: 1040px; margin: 0 auto 10px; min-height: 14px; }
-  textarea {
-    width: 100%; max-width: 1040px; display: block; margin: 12px auto;
-    height: 160px; background: var(--bg-panel); color: var(--confirmed);
-    border: 1px solid var(--line); border-radius: 8px; font-family: monospace;
-    font-size: 10px; padding: 10px;
-  }
-
-  @media (max-width: 480px) {
-    .gauge-grid { grid-template-columns: repeat(2, 1fr); }
-  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--ink); font-family:'JetBrains Mono',monospace; min-height:100vh; padding:18px 14px 60px; -webkit-font-smoothing:antialiased; }
+  .lf { font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; letter-spacing:.08em; }
+  header { max-width:1040px; margin:0 auto 16px; }
+  .htop { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px; margin-bottom:4px; }
+  .vid { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:clamp(24px,5vw,34px); letter-spacing:.02em; line-height:1; }
+  .vid .ac { color:var(--amber); }
+  .vmeta { font-size:10px; color:var(--ink-dim); letter-spacing:.04em; }
+  .cstat { text-align:right; font-size:11px; }
+  .cdot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); margin-right:6px; }
+  .cdot.live { background:var(--confirmed); box-shadow:0 0 6px var(--confirmed); }
+  .cdot.err { background:var(--danger); box-shadow:0 0 6px var(--danger); }
+  .controls { max-width:1040px; margin:0 auto 14px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  button { font-family:'Barlow Condensed',sans-serif; font-weight:600; letter-spacing:.04em; text-transform:uppercase; font-size:13px; padding:10px 16px; background:var(--bg-panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; cursor:pointer; }
+  button.p { border-color:var(--confirmed-dim); color:var(--confirmed); }
+  button:disabled { opacity:.35; cursor:default; }
+  button.d { border-color:#5a2620; color:var(--danger); }
+  #sl { font-size:11px; color:var(--ink-dim); }
+  .section { max-width:1040px; margin:0 auto 24px; }
+  .sh { display:flex; align-items:center; gap:10px; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+  .sd { width:8px; height:8px; border-radius:50%; flex-shrink:0; background:var(--confirmed); box-shadow:0 0 8px var(--confirmed); }
+  .sd.exp { background:var(--amber); box-shadow:0 0 8px var(--amber); }
+  .st { font-family:'Barlow Condensed',sans-serif; font-weight:600; font-size:14px; letter-spacing:.06em; text-transform:uppercase; }
+  .ss { font-size:10px; color:var(--ink-dim); margin-left:auto; }
+  .gg { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+  .gc { background:var(--bg-panel); border:1px solid var(--line); border-radius:8px; padding:14px; }
+  .gc.exp { border-color:var(--amber-dim); }
+  .gp { font-size:9px; color:var(--ink-dim); letter-spacing:.08em; margin-bottom:2px; }
+  .gp .c { color:var(--confirmed); }
+  .gc.exp .gp .c { color:var(--amber); }
+  .gn { font-family:'Barlow Condensed',sans-serif; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:var(--ink); margin-bottom:10px; min-height:28px; }
+  .gr { display:flex; align-items:baseline; gap:5px; }
+  .gv { font-size:28px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
+  .gv.stale { color:var(--muted); }
+  .gu { font-size:12px; color:var(--ink-dim); }
+  #tp { max-width:1040px; margin:0 auto 20px; background:var(--bg-panel); border:1px solid var(--line); border-radius:8px; padding:14px; display:none; }
+  #tr { font-size:11px; max-height:260px; overflow-y:auto; }
+  @media(max-width:480px){ .gg{grid-template-columns:repeat(2,1fr);} }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="header-top">
+  <div class="htop">
     <div>
-      <div class="vehicle-id">LC79 <span class="accent">DIAG</span></div>
-      <div class="vehicle-meta">2024 LAND CRUISER 79 &middot; 1GR-FE V6 &middot; A/T 6-SPD &middot; VEEPEAK OBDCHECK BLE</div>
+      <div class="vid">LC79 <span class="ac">DIAG</span></div>
+      <div class="vmeta">2024 LAND CRUISER 79 &middot; 1GR-FE V6 &middot; A/T 6-SPD &middot; VEEPEAK OBDCHECK BLE</div>
     </div>
-    <div class="conn-status">
-      <div><span class="conn-dot" id="connDot"></span><span id="connText">Not connected</span></div>
-    </div>
+    <div class="cstat"><span class="cdot" id="cd"></span><span id="ct">Not connected</span></div>
   </div>
 </header>
 
 <div class="controls">
-  <button id="connectBtn" class="primary">Connect</button>
-  <button id="startBtn" class="primary" disabled>Start Live Readings</button>
+  <button id="connectBtn" class="p">Connect</button>
+  <button id="startBtn" class="p" disabled>Start Live</button>
   <button id="stopBtn" disabled>Stop</button>
-  <button id="testBtn" class="primary" disabled>Run Self-Test</button>
-  <button id="resetBtn" class="danger">Force Reset</button>
-  <span id="statusLine"></span>
+  <button id="testBtn" class="p" disabled>Self-Test</button>
+  <button id="resetBtn" class="d">Force Reset</button>
+  <span id="sl"></span>
 </div>
 
-<div id="liveDebug"></div>
-<div id="reconnectLog" style="max-width:1040px; margin:0 auto 12px; font-size:10px; color:var(--danger);"></div>
-
-<div id="testPanel" style="display:none; max-width:1040px; margin:0 auto 24px; background:var(--bg-panel); border:1px solid var(--line); border-radius:8px; padding:14px;">
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-    <div class="label-font" style="font-size:13px; font-weight:600;">Self-Test Results</div>
-    <div id="testSummary" style="font-size:11px; color:var(--ink-dim);"></div>
+<div id="tp">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <div class="lf" style="font-size:13px;font-weight:600;">Self-Test Results</div>
+    <div id="ts" style="font-size:11px;color:var(--ink-dim);"></div>
   </div>
-  <div id="testResults" style="font-size:11px; max-height:280px; overflow-y:auto;"></div>
+  <div id="tr"></div>
 </div>
 
-<!-- ENGINE -->
-<div class="section">
-  <div class="section-head">
-    <div class="section-dot"></div>
-    <div class="section-title">Engine</div>
-    <div class="section-sub label-font">MODE 01</div>
-  </div>
-  <div class="gauge-grid" id="grid-engine"></div>
-</div>
-
-<!-- TRANSMISSION -->
-<div class="section">
-  <div class="section-head">
-    <div class="section-dot"></div>
-    <div class="section-title">Transmission</div>
-    <div class="section-sub label-font">MODE 21 &middot; CONFIRMED</div>
-  </div>
-  <div class="gauge-grid" id="grid-trans"></div>
-</div>
-
-<!-- EMISSIONS -->
-<div class="section">
-  <div class="section-head">
-    <div class="section-dot"></div>
-    <div class="section-title">Emissions &amp; Fuel</div>
-    <div class="section-sub label-font">MODE 01</div>
-  </div>
-  <div class="gauge-grid" id="grid-emissions"></div>
-</div>
-
-<!-- THROTTLE / PEDAL -->
-<div class="section">
-  <div class="section-head">
-    <div class="section-dot"></div>
-    <div class="section-title">Throttle &amp; Pedal</div>
-    <div class="section-sub label-font">MODE 01</div>
-  </div>
-  <div class="gauge-grid" id="grid-throttle"></div>
-</div>
-
-<!-- SYSTEM -->
-<div class="section">
-  <div class="section-head">
-    <div class="section-dot"></div>
-    <div class="section-title">System</div>
-    <div class="section-sub label-font">MODE 01</div>
-  </div>
-  <div class="gauge-grid" id="grid-system"></div>
-</div>
-
-<!-- EXPERIMENTAL -->
-<div class="section">
-  <div class="section-head">
-    <div class="section-dot exp"></div>
-    <div class="section-title">Experimental</div>
-    <div class="section-sub label-font">UNCONFIRMED FORMULA</div>
-  </div>
-  <div class="gauge-grid" id="grid-experimental"></div>
-</div>
-
-<textarea id="exportBox" style="display:none"></textarea>
+<div id="grid-engine" class="section"></div>
+<div id="grid-trans" class="section"></div>
+<div id="grid-emissions" class="section"></div>
+<div id="grid-throttle" class="section"></div>
+<div id="grid-system" class="section"></div>
+<div id="grid-experimental" class="section"></div>
 
 <script>
-const FFF0_SERVICE = '0000fff0-0000-1000-8000-00805f9b34fb';
-const FFF1_NOTIFY   = '0000fff1-0000-1000-8000-00805f9b34fb';
-const FFF2_WRITE     = '0000fff2-0000-1000-8000-00805f9b34fb';
+const SVC  = '0000fff0-0000-1000-8000-00805f9b34fb';
+const N_CH = '0000fff1-0000-1000-8000-00805f9b34fb';
+const W_CH = '0000fff2-0000-1000-8000-00805f9b34fb';
 
-let device, server, writeChar, notifyChar;
-let rxBuffer = '';
-let responseResolve = null;
-let loggingActive = false;
-let consecutiveWatchdogFires = 0;
+let device, server, wChar, nChar;
+let rxBuf = '', resolveFn = null, looping = false;
 
-// ---------- GAUGE DEFINITIONS ----------
-// Each gauge: id, pid (full cmd e.g. '010C'), name, unit, decode(bytesHexAfterEcho), group, experimental
-const GAUGES = [
-  // ENGINE
-  { id:'rpm', pid:'010C', name:'Engine RPM', unit:'rpm', group:'engine',
-    decode: h => Math.round(parseInt(h.substr(0,4),16)/4) },
-  { id:'speed', pid:'010D', name:'Vehicle Speed', unit:'km/h', group:'engine',
-    decode: h => parseInt(h.substr(0,2),16) },
-  { id:'coolant', pid:'0105', name:'Coolant Temp', unit:'°C', group:'engine',
-    decode: h => parseInt(h.substr(0,2),16)-40 },
-  { id:'intake', pid:'010F', name:'Intake Air Temp', unit:'°C', group:'engine',
-    decode: h => parseInt(h.substr(0,2),16)-40 },
-  { id:'ambient', pid:'0146', name:'Ambient Air Temp', unit:'°C', group:'engine',
-    decode: h => parseInt(h.substr(0,2),16)-40 },
-  { id:'maf', pid:'0110', name:'MAF Air Flow', unit:'g/s', group:'engine',
-    decode: h => (parseInt(h.substr(0,4),16)/100).toFixed(2) },
-  { id:'load', pid:'0104', name:'Engine Load', unit:'%', group:'engine',
-    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
-  { id:'timing', pid:'010E', name:'Timing Advance', unit:'deg', group:'engine',
-    decode: h => ((parseInt(h.substr(0,2),16)/2)-64).toFixed(1) },
-  { id:'runtime', pid:'011F', name:'Run Time', unit:'s', group:'engine',
-    decode: h => parseInt(h.substr(0,4),16) },
+const $ = id => document.getElementById(id);
+const setConn = (t,c) => { $('ct').textContent=t; $('cd').className='cdot '+(c||''); };
+const setSL = t => $('sl').textContent = t;
 
-  // TRANSMISSION (Mode 21)
-  { id:'transpan', pid:'2182', name:'Trans Fluid - Pan', unit:'°C', group:'trans', mode21: true,
-    decode: h => {
-      const A=parseInt(h.substr(0,2),16), B=parseInt(h.substr(2,2),16);
-      const f = (((A*256+B)*7/100)-400)/10;
-      return ((f-32)*5/9).toFixed(1);
-    }},
-  { id:'transconv', pid:'2182', name:'Trans Fluid - Converter', unit:'°C', group:'trans', mode21: true,
-    decode: h => {
-      const C=parseInt(h.substr(4,2),16), D=parseInt(h.substr(6,2),16);
-      const f = (((C*256+D)*7/100)-400)/10;
-      return ((f-32)*5/9).toFixed(1);
-    }},
-
-  // EMISSIONS
-  { id:'cat_b1s1', pid:'013C', name:'Catalyst Temp B1S1', unit:'°C', group:'emissions',
-    decode: h => (parseInt(h.substr(0,4),16)/10 - 40).toFixed(1) },
-  { id:'cat_b2s1', pid:'013D', name:'Catalyst Temp B2S1', unit:'°C', group:'emissions',
-    decode: h => (parseInt(h.substr(0,4),16)/10 - 40).toFixed(1) },
-  { id:'cat_b1s2', pid:'013E', name:'Catalyst Temp B1S2', unit:'°C', group:'emissions',
-    decode: h => (parseInt(h.substr(0,4),16)/10 - 40).toFixed(1) },
-  { id:'cat_b2s2', pid:'013F', name:'Catalyst Temp B2S2', unit:'°C', group:'emissions',
-    decode: h => (parseInt(h.substr(0,4),16)/10 - 40).toFixed(1) },
-  { id:'stft1', pid:'0106', name:'Short Fuel Trim B1', unit:'%', group:'emissions',
-    decode: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1) },
-  { id:'ltft1', pid:'0107', name:'Long Fuel Trim B1', unit:'%', group:'emissions',
-    decode: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1) },
-  { id:'stft2', pid:'0108', name:'Short Fuel Trim B2', unit:'%', group:'emissions',
-    decode: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1) },
-  { id:'ltft2', pid:'0109', name:'Long Fuel Trim B2', unit:'%', group:'emissions',
-    decode: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1) },
-  { id:'fuelair', pid:'0144', name:'Fuel/Air Equiv Ratio', unit:'', group:'emissions',
-    decode: h => (parseInt(h.substr(0,4),16)/32768).toFixed(2) },
-
-  // THROTTLE / PEDAL
-  { id:'throttle', pid:'0111', name:'Throttle Position', unit:'%', group:'throttle',
-    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
-  { id:'relthrottle', pid:'0145', name:'Relative Throttle', unit:'%', group:'throttle',
-    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
-  { id:'throttleb', pid:'0147', name:'Throttle Position B', unit:'%', group:'throttle',
-    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
-  { id:'pedald', pid:'0149', name:'Pedal Position D', unit:'%', group:'throttle',
-    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
-  { id:'pedale', pid:'014A', name:'Pedal Position E', unit:'%', group:'throttle',
-    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
-  { id:'cmdthrottle', pid:'014C', name:'Commanded Throttle', unit:'%', group:'throttle',
-    decode: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1) },
-
-  // SYSTEM
-  { id:'voltage', pid:'0142', name:'Control Module Voltage', unit:'V', group:'system',
-    decode: h => (parseInt(h.substr(0,4),16)/1000).toFixed(2) },
-  { id:'baro', pid:'0133', name:'Barometric Pressure', unit:'kPa', group:'system',
-    decode: h => parseInt(h.substr(0,2),16) },
-  { id:'milkm', pid:'0121', name:'Distance with MIL', unit:'km', group:'system',
-    decode: h => parseInt(h.substr(0,4),16) },
-
-  // EXPERIMENTAL
-  { id:'pid2105', pid:'2105', name:'2105 - Likely Driveshaft/Wheel Speed', unit:'raw', group:'experimental', mode21: true,
-    decode: h => parseInt(h.substr(0,4),16) },
-];
-
-function buildGrids() {
-  const groupTargets = {
-    engine: 'grid-engine', trans: 'grid-trans', emissions: 'grid-emissions',
-    throttle: 'grid-throttle', system: 'grid-system', experimental: 'grid-experimental'
-  };
-  for (const g of GAUGES) {
-    const container = document.getElementById(groupTargets[g.group]);
-    const card = document.createElement('div');
-    card.className = 'gauge-card' + (g.group === 'experimental' ? ' exp' : '');
-    card.id = 'card-' + g.id;
-    card.innerHTML =
-      '<div class="gauge-pid">' + (g.mode21 ? 'MODE 21' : 'MODE 01') + ' &middot; <span class="code">' + g.pid + '</span></div>' +
-      '<div class="gauge-name">' + g.name + '</div>' +
-      '<div class="gauge-reading"><span class="gauge-value" id="val-' + g.id + '">--</span><span class="gauge-unit">' + g.unit + '</span></div>';
-    container.appendChild(card);
-  }
-}
-buildGrids();
-
-const setConn = (text, cls) => {
-  document.getElementById('connText').textContent = text;
-  document.getElementById('connDot').className = 'conn-dot ' + (cls || '');
-};
-const setStatusLine = (text) => { document.getElementById('statusLine').textContent = text; };
-
-function handleNotify(event) {
-  const value = event.target.value;
-  const decoder = new TextDecoder('ascii');
-  const chunk = decoder.decode(value);
-  rxBuffer += chunk;
-  const dbg = document.getElementById('liveDebug');
-  if (dbg) dbg.textContent = chunk.includes('>') ? '' : 'rx: ' + JSON.stringify(chunk);
-  if (rxBuffer.includes('>')) {
-    const fullResponse = rxBuffer;
-    rxBuffer = '';
-    if (responseResolve) { responseResolve(fullResponse); responseResolve = null; }
+// ---------- BLE CORE ----------
+function onNotify(evt) {
+  rxBuf += new TextDecoder('ascii').decode(evt.target.value);
+  if (rxBuf.includes('>')) {
+    const r = rxBuf; rxBuf = '';
+    if (resolveFn) { resolveFn(r); resolveFn = null; }
   }
 }
 
-function sendCommand(cmd, timeoutMs) {
-  timeoutMs = timeoutMs || 5000;
+function send(cmd, ms) {
+  ms = ms || 5000;
   return new Promise(async (resolve, reject) => {
-    try {
-      rxBuffer = '';
-      const encoder = new TextEncoder();
-      responseResolve = resolve;
-      await writeChar.writeValue(encoder.encode(cmd + '\r'));
-      setTimeout(() => {
-        if (responseResolve) { responseResolve = null; rxBuffer = ''; reject(new Error('Timeout: ' + cmd)); }
-      }, timeoutMs);
-    } catch (err) { reject(err); }
+    rxBuf = '';
+    resolveFn = resolve;
+    try { await wChar.writeValue(new TextEncoder().encode(cmd + '\r')); }
+    catch(e) { reject(e); return; }
+    setTimeout(() => {
+      if (resolveFn) { resolveFn = null; rxBuf = ''; reject(new Error('Timeout')); }
+    }, ms);
   });
 }
 
-async function sendFast(cmd, timeoutMs) {
-  timeoutMs = timeoutMs || 4000;
-  try { return await sendCommand(cmd, timeoutMs); }
-  catch (err) {
-    try { await writeChar.writeValue(new TextEncoder().encode('\r')); } catch(e2) {}
-    await new Promise(r => setTimeout(r, 350));
-    rxBuffer = ''; responseResolve = null;
+async function sendSafe(cmd) {
+  try { return await send(cmd, 5000); }
+  catch(e) {
+    try { await wChar.writeValue(new TextEncoder().encode('\r')); } catch(e2){}
+    await new Promise(r => setTimeout(r, 300));
+    rxBuf = ''; resolveFn = null;
     return 'TIMEOUT';
   }
 }
 
-function withWatchdog(promiseFactory, ms) {
-  return Promise.race([
-    promiseFactory(),
-    new Promise(resolve => setTimeout(() => {
-      responseResolve = null; rxBuffer = ''; consecutiveWatchdogFires++;
-      resolve('WATCHDOG_TIMEOUT');
-    }, ms))
-  ]);
-}
-let lastActivityTime = Date.now();
-async function sendGuarded(cmd) {
-  const result = await withWatchdog(() => sendFast(cmd), 7000);
-  lastActivityTime = Date.now();
-  if (result !== 'WATCHDOG_TIMEOUT') consecutiveWatchdogFires = 0;
-  return result;
+async function init() {
+  await send('ATZ', 3000);
+  await new Promise(r => setTimeout(r, 1000));
+  await send('ATE0');
+  await send('ATL0');
+  await send('ATH1');
+  await send('ATS0');
+  await send('ATSP0');
+  await send('0100', 6000);
 }
 
-let reconnectInProgress = false;
-
-function onUnexpectedDisconnect() {
-  if (reconnectInProgress) return; // we caused this ourselves mid-reconnect, ignore
-  setConn('Disconnected', 'err');
-  setStatusLine('Native BLE disconnect detected - reconnecting...');
-  attemptReconnect({ source: 'gattserverdisconnected', pid: 'n/a', name: 'native disconnect', raw: 'n/a' });
-}
-
-let reconnectAttempts = 0;
-let reconnectLog = [];
-async function attemptReconnect(triggerInfo) {
-  reconnectAttempts++;
-  reconnectLog.push({ time: new Date().toLocaleTimeString(), trigger: triggerInfo, attempt: reconnectAttempts });
-  const dbg = document.getElementById('liveDebug');
-  if (dbg) dbg.textContent = 'RECONNECT #' + reconnectAttempts + ' triggered by: ' + JSON.stringify(triggerInfo);
-  const logPanel = document.getElementById('reconnectLog');
-  if (logPanel) {
-    logPanel.innerHTML = reconnectLog.slice(-8).reverse().map(r =>
-      r.time + ' #' + r.attempt + ' - PID ' + (r.trigger ? r.trigger.pid : '?') +
-      ' (' + (r.trigger ? r.trigger.name : '?') + ') last raw: ' + (r.trigger ? JSON.stringify(r.trigger.raw) : '?')
-    ).join('<br>');
-  }
-  if (reconnectAttempts > 5) {
-    setConn('Disconnected', 'err');
-    setStatusLine('Too many reconnect attempts - tap Force Reset and reconnect manually.');
-    loggingActive = false;
-    return;
-  }
-  setStatusLine('Link stuck - reconnecting... (attempt ' + reconnectAttempts + ')');
-  setConn('Reconnecting...', 'err');
-  reconnectInProgress = true;
+document.getElementById('connectBtn').addEventListener('click', async () => {
   try {
-    // Remove the old notification listener before reconnecting - otherwise each
-    // reconnect stacks another listener on top, causing every incoming byte to be
-    // processed multiple times and corrupting rxBuffer almost immediately.
-    if (notifyChar) {
-      try { notifyChar.removeEventListener('characteristicvaluechanged', handleNotify); } catch (e) {}
-    }
-    if (device && device.gatt && device.gatt.connected) device.gatt.disconnect();
-    await new Promise(r => setTimeout(r, 1500));
-
-    // gatt.connect() has NO built-in timeout - if the OS Bluetooth stack is in a
-    // bad state (e.g. after a native-level disconnect), this can hang forever with
-    // no error and no resolution. Race it against a hard deadline so we always
-    // either succeed or fail within a bounded time, instead of freezing silently.
+    setConn('Requesting...', '');
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true, optionalServices: [SVC]
+    });
+    setConn('Connecting...', '');
     server = await Promise.race([
       device.gatt.connect(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('gatt.connect() timed out')), 8000))
+      new Promise((_,rj) => setTimeout(() => rj(new Error('connect timeout')), 10000))
     ]);
-    const service = await server.getPrimaryService(FFF0_SERVICE);
-    writeChar = await service.getCharacteristic(FFF2_WRITE);
-    notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
-    await notifyChar.startNotifications();
-    notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
+    const svc = await server.getPrimaryService(SVC);
+    wChar = await svc.getCharacteristic(W_CH);
+    nChar = await svc.getCharacteristic(N_CH);
+    await nChar.startNotifications();
+    nChar.addEventListener('characteristicvaluechanged', onNotify);
 
-    // Full re-init, matching the original Connect flow - a fresh GATT connection
-    // needs the complete ELM327 setup, not just echo-off.
-    rxBuffer = ''; responseResolve = null;
-    await sendCommand('ATZ', 3000);
-    await new Promise(r => setTimeout(r, 1000));
-    await sendCommand('ATE0');
-    await sendCommand('ATL0');
-    await sendCommand('ATH1');
-    await sendCommand('ATS0');
-    await sendCommand('ATSP0');
-    await sendCommand('0100', 6000);
+    // Detect native OS-level disconnects and inform user cleanly
+    device.addEventListener('gattserverdisconnected', () => {
+      if (looping) {
+        looping = false;
+        setConn('Disconnected', 'err');
+        setSL('BLE disconnected. Tap Connect to reconnect.');
+        $('startBtn').disabled = false;
+        $('stopBtn').disabled = true;
+        $('connectBtn').disabled = false;
+        $('testBtn').disabled = true;
+      }
+    });
 
-    consecutiveWatchdogFires = 0;
-    reconnectAttempts = 0;
-    lastActivityTime = Date.now();
-    setConn('Live', 'live');
-    setStatusLine('Reconnected.');
-  } catch (err) {
-    setConn('Disconnected', 'err');
-    setStatusLine('Reconnect failed: ' + err.message);
-  } finally {
-    reconnectInProgress = false;
+    setSL('Initializing...');
+    await init();
+    setConn('Connected', 'live');
+    setSL('Ready.');
+    $('startBtn').disabled = false;
+    $('testBtn').disabled = false;
+  } catch(e) {
+    setConn('Failed', 'err');
+    setSL(e.message);
+  }
+});
+
+// ---------- GAUGE DEFINITIONS ----------
+const GAUGES = [
+  // ENGINE
+  {id:'rpm',   pid:'010C', name:'Engine RPM',         unit:'rpm', group:'engine',
+   dec: h => Math.round(parseInt(h.substr(0,4),16)/4)},
+  {id:'spd',   pid:'010D', name:'Vehicle Speed',       unit:'km/h', group:'engine',
+   dec: h => parseInt(h.substr(0,2),16)},
+  {id:'cool',  pid:'0105', name:'Coolant Temp',        unit:'°C', group:'engine',
+   dec: h => parseInt(h.substr(0,2),16)-40},
+  {id:'iat',   pid:'010F', name:'Intake Air Temp',     unit:'°C', group:'engine',
+   dec: h => parseInt(h.substr(0,2),16)-40},
+  {id:'aat',   pid:'0146', name:'Ambient Air Temp',    unit:'°C', group:'engine',
+   dec: h => parseInt(h.substr(0,2),16)-40},
+  {id:'maf',   pid:'0110', name:'MAF Air Flow',        unit:'g/s', group:'engine',
+   dec: h => (parseInt(h.substr(0,4),16)/100).toFixed(2)},
+  {id:'load',  pid:'0104', name:'Engine Load',         unit:'%', group:'engine',
+   dec: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1)},
+  {id:'tim',   pid:'010E', name:'Timing Advance',      unit:'deg', group:'engine',
+   dec: h => ((parseInt(h.substr(0,2),16)/2)-64).toFixed(1)},
+  {id:'run',   pid:'011F', name:'Run Time',            unit:'s', group:'engine',
+   dec: h => parseInt(h.substr(0,4),16)},
+  // TRANSMISSION
+  {id:'tpan',  pid:'2182', name:'Trans Fluid - Pan',   unit:'°C', group:'trans', m21:true,
+   dec: h => { const f=(((parseInt(h.substr(0,2),16)*256+parseInt(h.substr(2,2),16))*7/100)-400)/10; return ((f-32)*5/9).toFixed(1); }},
+  {id:'tcon',  pid:'2182', name:'Trans Fluid - Conv',  unit:'°C', group:'trans', m21:true,
+   dec: h => { const f=(((parseInt(h.substr(4,2),16)*256+parseInt(h.substr(6,2),16))*7/100)-400)/10; return ((f-32)*5/9).toFixed(1); }},
+  // EMISSIONS
+  {id:'c1s1',  pid:'013C', name:'Catalyst Temp B1S1',  unit:'°C', group:'emissions',
+   dec: h => (parseInt(h.substr(0,4),16)/10-40).toFixed(1)},
+  {id:'c2s1',  pid:'013D', name:'Catalyst Temp B2S1',  unit:'°C', group:'emissions',
+   dec: h => (parseInt(h.substr(0,4),16)/10-40).toFixed(1)},
+  {id:'c1s2',  pid:'013E', name:'Catalyst Temp B1S2',  unit:'°C', group:'emissions',
+   dec: h => (parseInt(h.substr(0,4),16)/10-40).toFixed(1)},
+  {id:'c2s2',  pid:'013F', name:'Catalyst Temp B2S2',  unit:'°C', group:'emissions',
+   dec: h => (parseInt(h.substr(0,4),16)/10-40).toFixed(1)},
+  {id:'st1',   pid:'0106', name:'Short Fuel Trim B1',  unit:'%', group:'emissions',
+   dec: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1)},
+  {id:'lt1',   pid:'0107', name:'Long Fuel Trim B1',   unit:'%', group:'emissions',
+   dec: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1)},
+  {id:'st2',   pid:'0108', name:'Short Fuel Trim B2',  unit:'%', group:'emissions',
+   dec: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1)},
+  {id:'lt2',   pid:'0109', name:'Long Fuel Trim B2',   unit:'%', group:'emissions',
+   dec: h => ((parseInt(h.substr(0,2),16)-128)/128*100).toFixed(1)},
+  {id:'far',   pid:'0144', name:'Fuel/Air Equiv Ratio', unit:'', group:'emissions',
+   dec: h => (parseInt(h.substr(0,4),16)/32768).toFixed(2)},
+  // THROTTLE
+  {id:'thr',   pid:'0111', name:'Throttle Position',   unit:'%', group:'throttle',
+   dec: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1)},
+  {id:'rth',   pid:'0145', name:'Relative Throttle',   unit:'%', group:'throttle',
+   dec: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1)},
+  {id:'thb',   pid:'0147', name:'Throttle Pos B',      unit:'%', group:'throttle',
+   dec: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1)},
+  {id:'ppd',   pid:'0149', name:'Pedal Position D',    unit:'%', group:'throttle',
+   dec: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1)},
+  {id:'ppe',   pid:'014A', name:'Pedal Position E',    unit:'%', group:'throttle',
+   dec: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1)},
+  {id:'cta',   pid:'014C', name:'Commanded Throttle',  unit:'%', group:'throttle',
+   dec: h => (parseInt(h.substr(0,2),16)/255*100).toFixed(1)},
+  // SYSTEM
+  {id:'vlt',   pid:'0142', name:'Module Voltage',      unit:'V', group:'system',
+   dec: h => (parseInt(h.substr(0,4),16)/1000).toFixed(2)},
+  {id:'baro',  pid:'0133', name:'Barometric Pressure', unit:'kPa', group:'system',
+   dec: h => parseInt(h.substr(0,2),16)},
+  // EXPERIMENTAL
+  {id:'p2105', pid:'2105', name:'2105 - Driveshaft/Speed (raw)', unit:'', group:'experimental', m21:true,
+   dec: h => parseInt(h.substr(0,4),16)},
+];
+
+const GROUPS = {
+  engine:      { title:'Engine',            sub:'MODE 01',              dot:'sd' },
+  trans:       { title:'Transmission',      sub:'MODE 21 · CONFIRMED',  dot:'sd' },
+  emissions:   { title:'Emissions & Fuel',  sub:'MODE 01',              dot:'sd' },
+  throttle:    { title:'Throttle & Pedal',  sub:'MODE 01',              dot:'sd' },
+  system:      { title:'System',            sub:'MODE 01',              dot:'sd' },
+  experimental:{ title:'Experimental',      sub:'FORMULA UNCONFIRMED',  dot:'sd exp' },
+};
+
+function buildUI() {
+  for (const [grp, cfg] of Object.entries(GROUPS)) {
+    const wrap = $('grid-' + grp);
+    wrap.className = 'section';
+    wrap.innerHTML =
+      '<div class="sh"><div class="' + cfg.dot + '"></div>' +
+      '<div class="st">' + cfg.title + '</div>' +
+      '<div class="ss lf">' + cfg.sub + '</div></div>' +
+      '<div class="gg" id="gg-' + grp + '"></div>';
+  }
+  for (const g of GAUGES) {
+    const gg = $('gg-' + g.group);
+    const card = document.createElement('div');
+    card.className = 'gc' + (g.group === 'experimental' ? ' exp' : '');
+    card.innerHTML =
+      '<div class="gp">' + (g.m21 ? 'MODE 21' : 'MODE 01') +
+      ' · <span class="c">' + g.pid + '</span></div>' +
+      '<div class="gn">' + g.name + '</div>' +
+      '<div class="gr"><span class="gv" id="gv-' + g.id + '">--</span>' +
+      '<span class="gu">' + g.unit + '</span></div>';
+    gg.appendChild(card);
   }
 }
-
-// Sends a cheap, fast command to "wake up" the BLE link after idle time.
-// iOS can let the connection interval drift slower when idle, making the
-// FIRST real request after a pause take much longer than normal - this
-// absorbs that one-time lag before any time-sensitive PID sequence starts.
-async function wakeLink() {
-  setStatusLine('Waking link...');
-  try {
-    await sendCommand('ATI', 3000);
-  } catch (err) {
-    // wake attempt failed or timed out - clear state and continue
-    rxBuffer = '';
-    responseResolve = null;
-  }
-  lastActivityTime = Date.now();
-}
+buildUI();
 
 function cleanHex(raw) {
   return raw.replace(/SEARCHING\.\.\.\r?/g, '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
 }
 
-document.getElementById('connectBtn').addEventListener('click', async () => {
-  try {
-    setConn('Requesting device...', '');
-    device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [FFF0_SERVICE] });
-    device.addEventListener('gattserverdisconnected', onUnexpectedDisconnect);
-    setConn('Connecting...', '');
-    server = await device.gatt.connect();
-    const service = await server.getPrimaryService(FFF0_SERVICE);
-    writeChar = await service.getCharacteristic(FFF2_WRITE);
-    notifyChar = await service.getCharacteristic(FFF1_NOTIFY);
-    await notifyChar.startNotifications();
-    notifyChar.addEventListener('characteristicvaluechanged', handleNotify);
-
-    setConn('Initializing...', '');
-    await sendCommand('ATZ', 3000);
-    await new Promise(r => setTimeout(r, 1000));
-    await sendCommand('ATE0');
-    await sendCommand('ATL0');
-    await sendCommand('ATH1');
-    await sendCommand('ATS0');
-    await sendCommand('ATSP0');
-    await sendCommand('0100', 6000);
-
-    setConn('Connected', 'live');
-    setStatusLine('Ready.');
-    document.getElementById('startBtn').disabled = false;
-    document.getElementById('testBtn').disabled = false;
-  } catch (err) {
-    setConn('Connection failed', 'err');
-    setStatusLine(err.message);
-  }
-});
-
-function extractAndDecode(g, raw) {
+function decode(g, raw) {
+  if (raw === 'TIMEOUT') return null;
   const hex = cleanHex(raw);
-  const respCode = (g.mode21 ? '61' : '41') + g.pid.substring(2);
-  const idx = hex.indexOf(respCode);
+  const rc = (g.m21 ? '61' : '41') + g.pid.substring(2);
+  const idx = hex.indexOf(rc);
   if (idx === -1) return null;
-  const dataHex = hex.substring(idx + 4);
-  try { return g.decode(dataHex); } catch (e) { return null; }
+  try { return g.dec(hex.substring(idx + 4)); } catch(e) { return null; }
 }
 
-function updateGauge(g, value) {
-  const el = document.getElementById('val-' + g.id);
+function setGauge(g, val) {
+  const el = $('gv-' + g.id);
   if (!el) return;
-  if (value === null) {
-    el.classList.add('stale');
-  } else {
-    el.textContent = value;
-    el.classList.remove('stale');
-  }
+  if (val === null) { el.classList.add('stale'); }
+  else { el.textContent = val; el.classList.remove('stale'); }
 }
 
-async function readingsLoop() {
-  loggingActive = true;
-  while (loggingActive) {
+// ---------- LIVE READINGS ----------
+async function liveLoop() {
+  looping = true;
+  while (looping) {
     for (const g of GAUGES) {
-      if (!loggingActive) break;
-      setStatusLine('Reading ' + g.pid + ' (' + g.name + ')...');
-      const raw = await sendGuarded(g.pid);
-      if (consecutiveWatchdogFires >= 3) await attemptReconnect({ source: 'readingsLoop', pid: g.pid, name: g.name, raw, watchdogFires: consecutiveWatchdogFires });
+      if (!looping) break;
+      setSL(g.pid + ' · ' + g.name);
+      const raw = await sendSafe(g.pid);
+      setGauge(g, decode(g, raw));
     }
   }
 }
 
-document.getElementById('startBtn').addEventListener('click', async () => {
-  document.getElementById('startBtn').disabled = true;
-  document.getElementById('stopBtn').disabled = false;
-  document.getElementById('connectBtn').disabled = true;
-  document.getElementById('testBtn').disabled = true;
-  setStatusLine('Live readings active...');
-  await wakeLink();
-  readingsLoop();
+$('startBtn').addEventListener('click', async () => {
+  $('startBtn').disabled = true;
+  $('stopBtn').disabled = false;
+  $('testBtn').disabled = true;
+  $('connectBtn').disabled = true;
+  // Wake the link once before starting the loop
+  setSL('Waking link...');
+  try { await send('ATI', 3000); } catch(e) {}
+  rxBuf = ''; resolveFn = null;
+  setSL('Live readings active...');
+  liveLoop();
 });
 
-document.getElementById('stopBtn').addEventListener('click', () => {
-  loggingActive = false;
-  document.getElementById('startBtn').disabled = false;
-  document.getElementById('stopBtn').disabled = true;
-  document.getElementById('connectBtn').disabled = false;
-  setStatusLine('Stopped.');
+$('stopBtn').addEventListener('click', () => {
+  looping = false;
+  $('startBtn').disabled = false;
+  $('stopBtn').disabled = true;
+  $('testBtn').disabled = false;
+  $('connectBtn').disabled = false;
+  setSL('Stopped.');
 });
 
 // ---------- SELF-TEST ----------
-document.getElementById('testBtn').addEventListener('click', async () => {
-  document.getElementById('testBtn').disabled = true;
-  document.getElementById('startBtn').disabled = true;
-  document.getElementById('connectBtn').disabled = true;
-  const panel = document.getElementById('testPanel');
-  panel.style.display = 'block';
-  document.getElementById('testResults').innerHTML = '';
-  document.getElementById('testSummary').textContent = 'Running...';
+$('testBtn').addEventListener('click', async () => {
+  $('testBtn').disabled = true;
+  $('startBtn').disabled = true;
+  $('connectBtn').disabled = true;
+  $('tp').style.display = 'block';
+  $('tr').innerHTML = '';
+  $('ts').textContent = 'Running...';
 
-  await wakeLink();
+  // Wake first
+  setSL('Waking link...');
+  try { await send('ATI', 3000); } catch(e) {}
+  rxBuf = ''; resolveFn = null;
 
   const results = [];
   for (const g of GAUGES) {
-    setStatusLine('Self-test: ' + g.pid + ' (' + g.name + ')...');
-    const raw = await sendGuarded(g.pid);
-    if (consecutiveWatchdogFires >= 3) await attemptReconnect({ source: 'selfTest', pid: g.pid, name: g.name, raw, watchdogFires: consecutiveWatchdogFires });
-    const hex = cleanHex(raw);
-    let status, value;
-    if (raw === 'TIMEOUT' || raw === 'WATCHDOG_TIMEOUT') {
-      status = 'TIMEOUT';
-    } else {
-      value = extractAndDecode(g, raw);
-      status = value !== null ? 'OK' : 'NO-MATCH';
-    }
-    results.push({ gauge: g, status, value, raw: (status === 'TIMEOUT' ? '(no response)' : hex) });
-    if (status === 'OK') updateGauge(g, value);
+    setSL('Testing ' + g.pid + ' · ' + g.name);
+    const raw = await sendSafe(g.pid);
+    const val = decode(g, raw);
+    const status = raw === 'TIMEOUT' ? 'TIMEOUT' : (val !== null ? 'OK' : 'NO-MATCH');
+    if (status === 'OK') setGauge(g, val);
+    results.push({ g, status, val, raw });
   }
 
-  // Sort: failures first (TIMEOUT, then NO-MATCH), then OK
-  const order = { 'TIMEOUT': 0, 'NO-MATCH': 1, 'OK': 2 };
-  results.sort((a, b) => order[a.status] - order[b.status]);
+  results.sort((a,b) => ({TIMEOUT:0,'NO-MATCH':1,OK:2}[a.status] - ({TIMEOUT:0,'NO-MATCH':1,OK:2}[b.status])));
+  const okN = results.filter(r => r.status === 'OK').length;
+  $('ts').textContent = okN + ' / ' + results.length + ' responded';
 
-  const okCount = results.filter(r => r.status === 'OK').length;
-  document.getElementById('testSummary').textContent =
-    okCount + ' / ' + results.length + ' responded';
-
-  const tbody = document.getElementById('testResults');
-  let html = '<table style="width:100%; border-collapse:collapse;">' +
-    '<thead><tr style="color:var(--ink-dim); text-align:left;">' +
+  $('tr').innerHTML = '<table style="width:100%;border-collapse:collapse;">' +
+    '<thead><tr style="color:var(--ink-dim);text-align:left;">' +
     '<th style="padding:4px;">Status</th><th style="padding:4px;">PID</th>' +
-    '<th style="padding:4px;">Name</th><th style="padding:4px;">Value</th></tr></thead><tbody>';
-  for (const r of results) {
-    const color = r.status === 'OK' ? 'var(--confirmed)' : (r.status === 'TIMEOUT' ? 'var(--danger)' : 'var(--amber)');
-    html += '<tr style="border-bottom:1px solid var(--line);">' +
-      '<td style="padding:4px; color:' + color + '; font-weight:600;">' + r.status + '</td>' +
-      '<td style="padding:4px; color:var(--ink-dim);">' + r.gauge.pid + '</td>' +
-      '<td style="padding:4px;">' + r.gauge.name + '</td>' +
-      '<td style="padding:4px; color:var(--ink-dim);">' + (r.value !== undefined ? r.value : (r.raw || '')) + '</td>' +
-      '</tr>';
-  }
-  html += '</tbody></table>';
-  tbody.innerHTML = html;
+    '<th style="padding:4px;">Name</th><th style="padding:4px;">Value</th></tr></thead><tbody>' +
+    results.map(r => {
+      const col = r.status==='OK' ? 'var(--confirmed)' : r.status==='TIMEOUT' ? 'var(--danger)' : 'var(--amber)';
+      const dispVal = r.status === 'OK' ? r.val : (r.status === 'TIMEOUT' ? '(no response)' : '(no match)');
+      return '<tr style="border-bottom:1px solid var(--line);">' +
+        '<td style="padding:4px;color:'+col+';font-weight:600;">'+r.status+'</td>' +
+        '<td style="padding:4px;color:var(--ink-dim);">'+r.g.pid+'</td>' +
+        '<td style="padding:4px;">'+r.g.name+'</td>' +
+        '<td style="padding:4px;color:var(--ink-dim);">'+dispVal+'</td></tr>';
+    }).join('') + '</tbody></table>';
 
-  setStatusLine('Self-test complete: ' + okCount + '/' + results.length + ' OK.');
-  document.getElementById('testBtn').disabled = false;
-  document.getElementById('startBtn').disabled = false;
-  document.getElementById('connectBtn').disabled = false;
+  setSL('Self-test complete: ' + okN + '/' + results.length + ' OK.');
+  $('testBtn').disabled = false;
+  $('startBtn').disabled = false;
+  $('connectBtn').disabled = false;
 });
 
-document.getElementById('resetBtn').addEventListener('click', () => {
-  loggingActive = false;
-  rxBuffer = ''; responseResolve = null; consecutiveWatchdogFires = 0; reconnectAttempts = 0;
-  document.getElementById('startBtn').disabled = false;
-  document.getElementById('stopBtn').disabled = true;
-  document.getElementById('connectBtn').disabled = false;
-  setStatusLine('Reset.');
+// ---------- RESET ----------
+$('resetBtn').addEventListener('click', () => {
+  looping = false;
+  rxBuf = ''; resolveFn = null;
+  $('startBtn').disabled = false;
+  $('stopBtn').disabled = true;
+  $('testBtn').disabled = false;
+  $('connectBtn').disabled = false;
+  setSL('Reset.');
 });
 </script>
 </body>
