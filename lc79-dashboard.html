@@ -66,7 +66,7 @@
   <div class="htop">
     <div>
       <div class="vid">LC79 <span class="ac">DIAG</span></div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--amber);letter-spacing:.06em;margin-top:2px;">VERSION 8</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--amber);letter-spacing:.06em;margin-top:2px;">VERSION 9</div>
       <div class="vmeta">2024 LAND CRUISER 79 &middot; 1GR-FE V6 &middot; A/T 6-SPD &middot; VEEPEAK OBDCHECK BLE</div>
     </div>
     <div class="cstat"><span class="cdot" id="cd"></span><span id="ct">Not connected</span></div>
@@ -211,16 +211,14 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
 
     // Detect native OS-level disconnects and inform user cleanly
     device.addEventListener('gattserverdisconnected', () => {
-      dbg('*** NATIVE BLE DISCONNECT ***');
-      if (looping) {
-        looping = false;
-        setConn('Disconnected', 'err');
-        setSL('BLE disconnected. Tap Connect to reconnect.');
-        $('startBtn').disabled = false;
-        $('stopBtn').disabled = true;
-        $('connectBtn').disabled = false;
-        $('testBtn').disabled = true;
-      }
+      dbg('*** NATIVE BLE DISCONNECT *** looping was: ' + looping);
+      looping = false;
+      setConn('Disconnected', 'err');
+      setSL('BLE disconnected. Tap Connect to reconnect.');
+      $('startBtn').disabled = false;
+      $('stopBtn').disabled = true;
+      $('connectBtn').disabled = false;
+      $('testBtn').disabled = true;
     });
 
     setSL('Initializing...');
@@ -374,7 +372,7 @@ async function liveLoop() {
 
   while (looping) {
     cycle++;
-    dbg('--- CYCLE ' + cycle + ' START ---');
+    dbg('--- CYCLE ' + cycle + ' START (looping=' + looping + ') ---');
     for (const g of PRIORITY) {
       if (!looping) { dbg('LOOP EXIT mid-priority'); break; }
       setSL(g.pid + ' · ' + g.name);
