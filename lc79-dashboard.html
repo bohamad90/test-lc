@@ -450,10 +450,6 @@ function withWatchdog(promiseFactory, ms) {
 }
 let lastActivityTime = Date.now();
 async function sendGuarded(cmd) {
-  const idleMs = Date.now() - lastActivityTime;
-  if (idleMs > 20000) {
-    await wakeLink();
-  }
   const result = await withWatchdog(() => sendFast(cmd), 7000);
   lastActivityTime = Date.now();
   if (result !== 'WATCHDOG_TIMEOUT') consecutiveWatchdogFires = 0;
@@ -548,12 +544,13 @@ async function attemptReconnect(triggerInfo) {
 async function wakeLink() {
   setStatusLine('Waking link...');
   try {
-    await sendCommand('ATI', 6000); // cheap, always-supported "print version" command
+    await sendCommand('ATI', 3000);
   } catch (err) {
-    // even a failed wake attempt still nudges the connection interval - continue regardless
+    // wake attempt failed or timed out - clear state and continue
+    rxBuffer = '';
+    responseResolve = null;
   }
-  rxBuffer = '';
-  responseResolve = null;
+  lastActivityTime = Date.now();
 }
 
 function cleanHex(raw) {
