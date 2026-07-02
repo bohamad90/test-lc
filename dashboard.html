@@ -396,9 +396,9 @@
 
 <script src="victron-ble.js?v=9"></script>
 <script src="junctek-shunt-ble.js?v=6"></script>
-<script src="mictuning-ble.js?v=2"></script>
+<script src="mictuning-ble.js?v=3"></script>
 <script>
-  var DASHBOARD_VERSION = 11;
+  var DASHBOARD_VERSION = 12;
   var CHANNEL_COUNT = 12, BATTERY_AH = 130, LOW_SOC = 20, LOW_VOLT = 11.5;
   var DEFAULT_KEY = '6cc611245a854a60cde278f036c5c98a';
   var DEF_CHANS = [['💡','Interior'],['🔆','Awning'],['🌀','Fan'],['🚰','Water pump'],['❄️','Fridge'],['🔌','Inverter'],['📡','Antenna'],['🛗','Slide-out'],['🔥','Heater'],['💡','Rock lights'],['🎺','Air horn'],['＋','Aux']];
@@ -771,7 +771,7 @@
 
   // ---- init ----
   renderIcons();syncTheme();refreshKey();tick();setInterval(tick,1000);draw();renderSocChart();renderSolarChart();
-  log('Dashboard v'+DASHBOARD_VERSION+' · drivers victron v'+(window.__VICTRON_BLE_VERSION__||'?')+', junctek v'+(window.__JUNCTEK_BLE_VERSION__||'?')+'. Offline-ready.');
+  log('Dashboard v'+DASHBOARD_VERSION+' · drivers victron v'+(window.__VICTRON_BLE_VERSION__||'?')+', junctek v'+(window.__JUNCTEK_BLE_VERSION__||'?')+', mictuning v'+(window.__MICTUNING_BLE_VERSION__||'?')+'. Offline-ready.');
 </script>
 </body>
 </html>

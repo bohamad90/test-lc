@@ -20,6 +20,13 @@
  *     Channel 4 ON  = f5 00 01 00 00 00 00
  *     ...and so on, two channels per data byte.
  *   - All On / All Off uses a dedicated 8-byte 0xf6 opcode, separate from per-channel toggling.
+ *   - IMPORTANT (found via live multi-channel testing, v3): the panel treats every 0xf5 write as
+ *     the ABSOLUTE state of all 12 channels, not a delta for one channel. setChannel() therefore
+ *     rebuilds the FULL 6-byte payload from all currently-known channel states on every call --
+ *     sending a packet with only one nibble set (and every other byte zero) turns every other
+ *     channel OFF. This is why turning on channel 4 right after channel 1 used to turn channel 1
+ *     back off. The panel's own status notify (FFF1) is also used to seed the internal state
+ *     tracker on connect, so a channel already on before this session isn't clobbered either.
  *
  * NOT YET CONFIRMED (parked for later polish):
  *   - The panel's physical LED indicator only lights up when a "master power" state is
@@ -204,29 +211,39 @@ class MictuningPanel {
     if (!this.writeChar) throw new Error('Not connected. Call connect() first.');
 
     var pairIndex = Math.floor(channelIndex / 2); // which data byte (0-5)
-    var isHighNibble = channelIndex % 2 === 0; // even index (channel 1,3,5...) = high nibble
-    if (pairIndex > 5) {
+    if (pairIndex > 5 || channelIndex < 0) {
       throw new Error('Channel index ' + channelIndex + ' out of range (this packet supports 12 channels, indices 0-11).');
     }
 
+    this._channelState[channelIndex] = on;
+
+    // IMPORTANT: the panel treats each 0xf5 write as the ABSOLUTE state of all 12 channels,
+    // not a delta for the one channel being changed -- confirmed by live testing (turning on
+    // channel 4 after channel 1 turned channel 1 back off, because the old code sent a packet
+    // with only channel 4's nibble set and every other byte zero, i.e. "everything else off").
+    // Fix: rebuild the full 6-byte payload from ALL currently-known channel states every time,
+    // with the requested channel already applied above, so channels that are already on stay on.
     var packet = new Uint8Array(7);
     packet[0] = 0xf5;
-    if (on) {
-      packet[1 + pairIndex] = isHighNibble ? 0x10 : 0x01;
+    for (var i = 0; i < 12; i++) {
+      if (!this._channelState[i]) continue;
+      var pIdx = Math.floor(i / 2);
+      var isHigh = i % 2 === 0;
+      packet[1 + pIdx] |= isHigh ? 0x10 : 0x01;
     }
-    // OFF is implicitly all-zero -- confirmed by capture, no explicit "off" marker needed.
-
-    this._channelState[channelIndex] = on;
 
     await this.writeChar.writeValueWithoutResponse(packet);
   }
 
-  /** All On / All Off, using the dedicated 0xf6 opcode (8 bytes), confirmed via live capture. */
+  /** All On / All Off, using the dedicated 0xf6 opcode (8 bytes), confirmed via live capture.
+   *  Also updates the internal per-channel state tracker so a subsequent single-channel
+   *  setChannel() call (which now sends the FULL known state every time) reflects reality. */
   async setAll(on) {
     if (!this.writeChar) throw new Error('Not connected. Call connect() first.');
     var packet = new Uint8Array(8);
     packet[0] = 0xf6;
     packet[1] = on ? 0x01 : 0x00;
+    for (var i = 0; i < 12; i++) this._channelState[i] = !!on;
     await this.writeChar.writeValueWithoutResponse(packet);
   }
 
@@ -267,6 +284,14 @@ class MictuningPanel {
       // One hex char per channel, starting at offset 4, up to 12 channels.
       var channelField = hex.substring(4, 16);
       channels = channelField.split('').map(function (c) { return c !== '0'; });
+
+      // Seed the internal absolute-state tracker from the panel's OWN reported status, so a
+      // channel that's already on (from before this session, or toggled by the physical button
+      // / official app) isn't silently turned off the next time setChannel() writes the full
+      // state. Only trust this when we got a full 12-channel read.
+      if (channels.length >= 12) {
+        for (var ci = 0; ci < 12; ci++) this._channelState[ci] = channels[ci];
+      }
     } catch (err) {
       // Parsing is best-effort; fall through with whatever we got.
     }
@@ -281,4 +306,9 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = { MictuningPanel: MictuningPanel, SERVICE_UUID: SERVICE_UUID, CHAR_FFFA: CHAR_FFFA, CHAR_FFF1: CHAR_FFF1 };
 } else {
   window.MictuningPanel = MictuningPanel;
+}
+
+console.log('>>> mictuning-ble.js VERSION 3 LOADED <<<');
+if (typeof window !== 'undefined') {
+  window.__MICTUNING_BLE_VERSION__ = 3;
 }
