@@ -120,11 +120,14 @@
 
   /* ── ETA gauge: time to full / time to empty, at a glance ── */
   .etacard{margin-top:16px;background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;}
-  .etacard .ring{position:relative;width:46px;height:46px;flex:none;border:2px solid var(--line2);border-radius:50%;background:var(--card);}
-  .etacard .ring i{position:absolute;inset:0;display:grid;place-items:center;font-size:18px;color:var(--faint);}
-  .etacard.charging .ring{border-color:var(--green);}
+  .etacard .ring{position:relative;width:50px;height:50px;flex:none;}
+  .etacard .ring svg{width:100%;height:100%;display:block;}
+  .etacard .ring .track{fill:none;stroke:var(--line2);stroke-width:4;}
+  .etacard .ring .arc{fill:none;stroke:var(--faint);stroke-width:4;stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .5s ease,stroke .3s;}
+  .etacard .ring i{position:absolute;inset:0;display:grid;place-items:center;font-size:15px;color:var(--faint);}
+  .etacard.charging .ring .arc{stroke:var(--green);}
   .etacard.charging .ring i{color:var(--green);}
-  .etacard.discharging .ring{border-color:var(--amber);}
+  .etacard.discharging .ring .arc{stroke:var(--amber);}
   .etacard.discharging .ring i{color:var(--amber);}
   .etacard .body{flex:1;min-width:0;}
   .etacard .lbl{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:0.06em;font-weight:700;}
@@ -320,7 +323,13 @@
     </div>
 
     <div class="etacard idle" id="etaCard">
-      <div class="ring"><i data-lucide="clock"></i></div>
+      <div class="ring">
+        <svg viewBox="0 0 50 50">
+          <circle class="track" cx="25" cy="25" r="21"/>
+          <circle class="arc" id="etaArc" cx="25" cy="25" r="21" stroke-dasharray="131.9" stroke-dashoffset="131.9"/>
+        </svg>
+        <i data-lucide="clock"></i>
+      </div>
       <div class="body">
         <div class="lbl" id="etaLbl">Time to full / empty</div>
         <div class="val" id="etaVal">--</div>
@@ -328,7 +337,7 @@
       </div>
     </div>
 
-    <div class="capline">Capacity <input id="capInput" type="number" min="1" max="2000" value="130" /> Ah · Est. load <span id="estLoad">--</span> <button id="capSave">Set</button></div>
+    <div class="capline">Capacity <input id="capInput" type="number" min="1" max="2000" value="72" /> Ah · Est. load <span id="estLoad">--</span> <button id="capSave">Set</button></div>
   </div>
 
   <div class="sec"><i data-lucide="sun"></i>Solar · SmartSolar MPPT<span class="rt" id="solarFresh"><span class="pulse"></span>offline</span></div>
@@ -398,8 +407,8 @@
 <script src="junctek-shunt-ble.js?v=6"></script>
 <script src="mictuning-ble.js?v=3"></script>
 <script>
-  var DASHBOARD_VERSION = 12;
-  var CHANNEL_COUNT = 12, BATTERY_AH = 130, LOW_SOC = 20, LOW_VOLT = 11.5;
+  var DASHBOARD_VERSION = 14;
+  var CHANNEL_COUNT = 12, BATTERY_AH = 72, LOW_SOC = 20, LOW_VOLT = 11.5;
   var DEFAULT_KEY = '6cc611245a854a60cde278f036c5c98a';
   var DEF_CHANS = [['💡','Interior'],['🔆','Awning'],['🌀','Fan'],['🚰','Water pump'],['❄️','Fridge'],['🔌','Inverter'],['📡','Antenna'],['🛗','Slide-out'],['🔥','Heater'],['💡','Rock lights'],['🎺','Air horn'],['＋','Aux']];
   var EMOJI_QUICK=['💡','🔦','☀️','🌙','⭐','🔥','❄️','💧','🌊','🚿','⚡','🔋','🔌','🔧','🛠️','🎺','📻','📡','🔊','🚗','🏕️','⛺','🎣','🏔️','🔑','🔒','🔓','🚨','⛽','🌡️','💨','🌀','🛞','🪟','🎵','📷','🖥️','🧊','🪣','＋'];
@@ -575,6 +584,15 @@
      Both use the SAME "remaining Ah = charge in the battery right now" figure shown in the
      "In battery" stat above — this card just projects it forward using the live current. */
   function fmtHours(h){ return h>=1 ? '~'+h.toFixed(1)+' h' : '~'+Math.max(1,Math.round(h*60))+' min'; }
+  var ETA_RING_C=131.9; // matches the SVG circle's circumference (r=21) in the markup
+  /** Fills the ring like a progress gauge toward whichever event is coming: charging fills up
+   *  as the battery nears FULL; discharging fills up as it nears EMPTY. pct is 0-100. */
+  function setEtaRing(pct){
+    var arc=document.getElementById('etaArc');
+    if(!arc)return;
+    pct=Math.max(0,Math.min(100,pct));
+    arc.setAttribute('stroke-dashoffset',(ETA_RING_C*(1-pct/100)).toFixed(1));
+  }
   function updateEtaCard(r,dir){
     var card=document.getElementById('etaCard'),lbl=document.getElementById('etaLbl'),
         val=document.getElementById('etaVal'),sub=document.getElementById('etaSub');
@@ -583,13 +601,16 @@
       lbl.textContent='Time to full / empty';
       val.textContent='--';
       sub.textContent=(r.current!=null&&Math.abs(r.current)<0.05)?'Idle — no significant current flowing':'Connect battery + solar for a live estimate';
+      setEtaRing(0);
       return;
     }
     var cur=Math.abs(r.current);
+    var socPct=capacity>0?Math.max(0,Math.min(100,r.remainingAh/capacity*100)):0;
     if(dir.state==='charging'){
       var toGo=Math.max(0,capacity-r.remainingAh);
       card.className='etacard charging';
       lbl.textContent='Time to FULL';
+      setEtaRing(socPct); // ring fills as charge level rises toward 100% (full)
       if(toGo<=0.05){ val.textContent='Full'; sub.textContent='Battery is at capacity'; }
       else{
         val.innerHTML=fmtHours(toGo/cur);
@@ -598,6 +619,7 @@
     }else if(dir.state==='discharging'){
       card.className='etacard discharging';
       lbl.textContent='Time to EMPTY';
+      setEtaRing(100-socPct); // ring fills as charge level falls toward 0% (empty)
       val.innerHTML=fmtHours(r.remainingAh/cur);
       sub.textContent=r.remainingAh.toFixed(1)+' Ah left in battery, drawing '+cur.toFixed(1)+' A';
     }
